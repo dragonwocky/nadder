@@ -24,4 +24,5 @@ export {
 } from "./deps.ts";
 
 export type { HTTPMethod, RouteContext, SocketContext } from "./server.ts";
+export type { Session } from "./session.ts";
 export type { Cookie } from "./deps.ts";
