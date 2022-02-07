@@ -16,7 +16,7 @@ declare global {
   namespace JSX {
     type IntrinsicElements = { [k: string]: JSX.Props };
     type Props = { [k: string]: string | number | boolean };
-    type Node = JSX.Element | string | number | boolean | undefined;
+    type Node = JSX.Element | string | number | boolean | null | undefined;
     type Component = (props: Props, children: JSX.Node[]) => Element;
     interface Element {
       type: string;
@@ -41,7 +41,7 @@ export const h = (
 export const jsxFrag = (_: unknown, children: JSX.Node[]) => children;
 
 const renderToString = ($: JSX.Node, parentType = ""): string => {
-  if (!$) return "";
+  if ($ === undefined || $ === null) return "";
   if (typeof $ === "string") {
     return ["script", "style"].includes(parentType) ? $ : escapeHtml($);
   }
