@@ -32,7 +32,7 @@ import {
   postgresSession,
   route,
   serve,
-  windiInstance,
+  unoInstance,
 } from 'https://deno.land/x/nadder/mod.ts';
 
 const postgres = postgresConnection({
@@ -45,14 +45,14 @@ route('GET', '/{index.html}?', async (ctx) => {
   const count = (((await session.get(ctx, 'count')) as number) ?? -1) + 1;
   await session.set(ctx, 'count', count);
 
-  const { tw, sheet } = windiInstance();
+  const { uno, sheet } = unoInstance();
   jsxResponse(
     ctx,
     <>
-      <p class={tw`font-bold m-4`}>
-        Page load count: <span class={tw`text-green-600`}>{count}</span>
+      <p class={uno`font-bold m-4`}>
+        Page load count: <span class={uno`text-green-600`}>{count}</span>
       </p>
-      {sheet()}
+      {await sheet()}
     </>
   );
 });

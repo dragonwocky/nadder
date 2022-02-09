@@ -9,7 +9,7 @@
  * @jsxFrag jsxFrag
  */
 
-import { StyleSheet, WindiProcessor } from "./deps.ts";
+import { initUno, unoPreset, unoTypography } from "./deps.ts";
 import { escapeHtml, reduceTemplate } from "./util.ts";
 
 declare global {
@@ -84,33 +84,41 @@ export const jsxToString = (
   return renderToString($);
 };
 
-const preflight =
+const modernNormalize =
   `/*! modern-normalize v1.1.0 | MIT License | https://github.com/sindresorhus/modern-normalize */*,::after,::before{box-sizing:border-box}html{-moz-tab-size:4;tab-size:4}html{line-height:1.15;-webkit-text-size-adjust:100%}body{margin:0}body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji'}hr{height:0;color:inherit}abbr[title]{text-decoration:underline dotted}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit}button,input,optgroup,select,textarea{font-family:inherit;font-size:100%;line-height:1.15;margin:0}button,select{text-transform:none}[type=button],[type=reset],[type=submit],button{-webkit-appearance:button}::-moz-focus-inner{border-style:none;padding:0}:-moz-focusring{outline:1px dotted ButtonText}:-moz-ui-invalid{box-shadow:none}legend{padding:0}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}`;
 
-export const windiInstance = (
-  mode: "interpret" | "compile" = "interpret",
-  config: Record<string, unknown> = {},
-) => {
-  const processor = new WindiProcessor();
-  config = processor.loadConfig(config);
-  let stylesheet = new StyleSheet();
+const expandGroups = (className: string) => {
+  // e.g. font-(bold mono) m(y-4 x-3) dark:(font-blue hover:(p-8 h-full))
+  // becomes font-bold font-mono my-4 mx-3 dark:font-blue dark:hover:p-8 dark:hover:h-full
+  const pattern = /([^\s'"`;>=]+)\(([^(]+?)\)/g,
+    replace = () => {
+      className = className.replaceAll(
+        pattern,
+        (_, variant, group) =>
+          group.split(/\s+/).map((utility: string) => `${variant}${utility}`)
+            .join(" "),
+      );
+    };
+  while (pattern.test(className)) replace();
+  return className;
+};
+
+export const unoInstance = (config: Parameters<typeof initUno>[0] = {}) => {
+  let cache = "";
+  config.presets = config.presets ??
+    [unoPreset({ dark: "class", variablePrefix: "uno-" }), unoTypography()];
+  config.preflights = config.preflights ?? [{ getCSS: () => modernNormalize }];
+  const engine = initUno(config);
+  type GenerateOptions = Parameters<typeof engine.generate>[1];
   return {
-    tw: (t: TemplateStringsArray | string[], ...s: unknown[]) => {
-      const className = reduceTemplate(t, ...s);
-      if (mode === "compile") {
-        const compiled = processor.compile(className, config.prefix as string);
-        stylesheet = stylesheet.extend(compiled.styleSheet);
-        return [compiled.className, ...compiled.ignored].join(" ");
-      }
-      const interpreted = processor.interpret(className);
-      stylesheet = stylesheet.extend(interpreted.styleSheet);
-      return [...interpreted.success, ...interpreted.ignored].join(" ");
+    uno: (t: TemplateStringsArray | string[], ...s: unknown[]) => {
+      const className = expandGroups(reduceTemplate(t, ...s));
+      cache += ` ${className}`;
+      return className;
     },
-    sheet: () => (
-      <style>
-        {config.preflight === false ? "" : preflight}
-        {stylesheet.sort().combine().build(true)}
-      </style>
-    ),
+    sheet: async (options: GenerateOptions = { minify: true }) => {
+      const { css } = await engine.generate(cache, options);
+      return <style>{css}</style>;
+    },
   };
 };

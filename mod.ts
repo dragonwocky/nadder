@@ -14,7 +14,7 @@ export {
 } from "./response.ts";
 export { route, serve, ws } from "./server.ts";
 export { memorySession, postgresSession } from "./session.ts";
-export { h, jsxFrag, jsxToString, windiInstance } from "./ssr.tsx";
+export { h, jsxFrag, jsxToString, unoInstance } from "./ssr.tsx";
 export {
   contentType,
   deleteCookie,
