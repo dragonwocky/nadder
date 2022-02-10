@@ -4,24 +4,16 @@
  * (https://github.com/dragonwocky/nadder) under the MIT license
  */
 
-import { RouteContext, SocketContext } from "./server.ts";
-import { getCookies, setCookie } from "./deps.ts";
-
-export interface Session {
-  get: (
-    ctx: RouteContext | SocketContext,
-    key: string,
-  ) => unknown | Promise<unknown>;
-  set: (ctx: RouteContext, key: string, value: unknown) => void | Promise<void>;
-}
+import type { Context, Session } from "../../types.ts";
+import { getCookies, setCookie } from "../../deps.ts";
 
 const validSession = (uuid: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i
         .test(uuid)
       ? uuid
       : null,
-  extractSession = (ctx: RouteContext | SocketContext, cookie: string) => {
-    const headers = (<RouteContext> ctx).res?.headers,
+  extractSession = (ctx: Context, cookie: string) => {
+    const headers = ctx.res?.headers,
       id = validSession(
         ctx.req.cookies[cookie] ??
           (headers ? getCookies(headers)[cookie] : ""),
@@ -29,58 +21,7 @@ const validSession = (uuid: string) =>
     return id;
   };
 
-export const memorySession = ({
-  cookie = "session_id",
-  expiry = 3600,
-} = {}): Session => {
-  const sessions = new Map(),
-    expiries = new Map();
-
-  const sessionExists = (id: string) => sessions.has(id),
-    uniqueSession = (): string => {
-      const id = crypto.randomUUID();
-      return sessionExists(id) ? uniqueSession() : id;
-    },
-    collectGarbage = () => {
-      const now = Date.now();
-      for (const [id, expiry] of expiries) {
-        if (now < expiry) continue;
-        expiries.delete(id);
-        sessions.delete(id);
-      }
-    };
-
-  const set = (id: string, key: string, value: unknown) => {
-      sessions.get(id)[key] = value;
-    },
-    get = (id: string, key: string) => sessions.get(id)[key],
-    init = (ctx: RouteContext) => {
-      collectGarbage();
-      const id = extractSession(ctx, cookie) ?? uniqueSession();
-      if (!sessionExists(id)) {
-        expiries.set(id, Date.now() + 1000 * expiry);
-        sessions.set(id, {});
-      }
-      setCookie(ctx.res.headers, {
-        name: cookie,
-        value: id,
-        httpOnly: true,
-        maxAge: expiry,
-      });
-      return id;
-    };
-
-  return {
-    get: (ctx, key) => {
-      collectGarbage();
-      const id = extractSession(ctx, cookie);
-      return id ? get(id, key) : undefined;
-    },
-    set: (ctx, key, value) => set(init(ctx), key, value),
-  };
-};
-
-export const postgresSession = async (query: CallableFunction, {
+const postgresSession = async (query: CallableFunction, {
   cookie = "session_id",
   expiry = 3600,
   table = "sessions",
@@ -115,7 +56,7 @@ export const postgresSession = async (query: CallableFunction, {
         res: any = await query(q, { id, key });
       return res.rows?.[0]?.["?column?"];
     },
-    init = async (ctx: RouteContext) => {
+    init = async (ctx: Context) => {
       await collectGarbage();
       const id = extractSession(ctx, cookie) ?? await uniqueSession();
       if (!(await sessionExists(id))) {
@@ -144,3 +85,5 @@ export const postgresSession = async (query: CallableFunction, {
     set: async (ctx, key, value) => set(await init(ctx), key, value),
   };
 };
+
+export { postgresSession };

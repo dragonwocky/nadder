@@ -4,9 +4,9 @@
  * (https://github.com/dragonwocky/nadder) under the MIT license
  */
 
-import { postgres } from "./deps.ts";
+import { postgres } from "../../deps.ts";
 
-export const postgresConnection = ({
+const postgresConnection = ({
   user = "postgres",
   password = Deno.env.get("POSTGRES_PWD"),
   hostname = Deno.env.get("POSTGRES_HOST"),
@@ -34,3 +34,5 @@ export const postgresConnection = ({
     };
   return query;
 };
+
+export { postgresConnection };
