@@ -23,13 +23,15 @@ const expandGroups = (className: string) => {
   return className;
 };
 
-const unoInstance = (config: Parameters<typeof initUno>[0] = {}) => {
-  let cache = "";
+type UnoConfig = Parameters<typeof initUno>[0];
+type UnoGenerator = ReturnType<typeof initUno>;
+type GenerateOptions = Parameters<UnoGenerator["generate"]>[1];
+
+const unoInstance = (config: UnoConfig = {}) => {
+  let cache = "", engine: undefined | UnoGenerator = undefined;
   config.presets = config.presets ??
     [unoPreset({ dark: "class", variablePrefix: "uno-" }), unoTypography()];
   config.preflights = config.preflights ?? [{ getCSS: () => modernNormalize }];
-  const engine = initUno(config);
-  type GenerateOptions = Parameters<typeof engine.generate>[1];
   return {
     uno: (t: TemplateStringsArray | string[], ...s: unknown[]) => {
       const className = expandGroups(reduceTemplate(t, ...s));
@@ -37,6 +39,7 @@ const unoInstance = (config: Parameters<typeof initUno>[0] = {}) => {
       return className;
     },
     css: async (options: GenerateOptions = { minify: true }) => {
+      if (!engine) engine = initUno(config);
       const { css } = await engine.generate(cache, options);
       return css;
     },

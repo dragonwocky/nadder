@@ -6,20 +6,7 @@
 
 import type { Context, Session } from "../../types.ts";
 import { getCookies, setCookie } from "../../deps.ts";
-
-const validSession = (uuid: string) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-        .test(uuid)
-      ? uuid
-      : null,
-  extractSession = (ctx: Context, cookie: string) => {
-    const headers = ctx.res?.headers,
-      id = validSession(
-        ctx.req.cookies[cookie] ??
-          (headers ? getCookies(headers)[cookie] : ""),
-      );
-    return id;
-  };
+import { isValidUUID } from "../../util.ts";
 
 const postgresSession = async (query: CallableFunction, {
   cookie = "session_id",
@@ -34,7 +21,14 @@ const postgresSession = async (query: CallableFunction, {
     )
   `);
 
-  const sessionExists = async (id: string) => {
+  const extractSession = (ctx: Context) => {
+      const headers = ctx.res.headers,
+        cached = ctx.req.cookies[cookie] ??
+          (headers ? getCookies(ctx.res.headers)[cookie] : ""),
+        valid = isValidUUID(cached) ? cached : undefined;
+      return valid;
+    },
+    sessionExists = async (id: string) => {
       const q = `SELECT EXISTS(SELECT 1 FROM ${table} where id = $id)`,
         // deno-lint-ignore no-explicit-any
         res: any = await query(q, { id });
@@ -58,7 +52,7 @@ const postgresSession = async (query: CallableFunction, {
     },
     init = async (ctx: Context) => {
       await collectGarbage();
-      const id = extractSession(ctx, cookie) ?? await uniqueSession();
+      const id = extractSession(ctx) ?? await uniqueSession();
       if (!(await sessionExists(id))) {
         const timestamp = (new Date(Date.now() + 1000 * expiry)).toISOString(),
           q = `
@@ -79,7 +73,7 @@ const postgresSession = async (query: CallableFunction, {
   return {
     get: async (ctx, key) => {
       await collectGarbage();
-      const id = extractSession(ctx, cookie);
+      const id = extractSession(ctx);
       return id ? await get(id, key) : undefined;
     },
     set: async (ctx, key, value) => set(await init(ctx), key, value),

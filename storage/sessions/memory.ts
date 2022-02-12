@@ -6,20 +6,7 @@
 
 import type { Context, Session } from "../../types.ts";
 import { getCookies, setCookie } from "../../deps.ts";
-
-const validSession = (uuid: string) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-        .test(uuid)
-      ? uuid
-      : null,
-  extractSession = (ctx: Context, cookie: string) => {
-    const headers = ctx.res?.headers,
-      id = validSession(
-        ctx.req.cookies[cookie] ??
-          (headers ? getCookies(headers)[cookie] : ""),
-      );
-    return id;
-  };
+import { isValidUUID } from "../../util.ts";
 
 const memorySession = ({
   cookie = "session_id",
@@ -28,7 +15,14 @@ const memorySession = ({
   const sessions = new Map(),
     expiries = new Map();
 
-  const sessionExists = (id: string) => sessions.has(id),
+  const extractSession = (ctx: Context) => {
+      const headers = ctx.res.headers,
+        cached = ctx.req.cookies[cookie] ??
+          (headers ? getCookies(ctx.res.headers)[cookie] : ""),
+        valid = isValidUUID(cached) ? cached : undefined;
+      return valid;
+    },
+    sessionExists = (id: string) => sessions.has(id),
     uniqueSession = (): string => {
       const id = crypto.randomUUID();
       return sessionExists(id) ? uniqueSession() : id;
@@ -48,7 +42,7 @@ const memorySession = ({
     get = (id: string, key: string) => sessions.get(id)[key],
     init = (ctx: Context) => {
       collectGarbage();
-      const id = extractSession(ctx, cookie) ?? uniqueSession();
+      const id = extractSession(ctx) ?? uniqueSession();
       if (!sessionExists(id)) {
         expiries.set(id, Date.now() + 1000 * expiry);
         sessions.set(id, {});
@@ -65,7 +59,7 @@ const memorySession = ({
   return {
     get: (ctx, key) => {
       collectGarbage();
-      const id = extractSession(ctx, cookie);
+      const id = extractSession(ctx);
       return id ? get(id, key) : undefined;
     },
     set: (ctx, key, value) => set(init(ctx), key, value),

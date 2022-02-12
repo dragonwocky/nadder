@@ -4,7 +4,7 @@
  * (https://github.com/dragonwocky/nadder) under the MIT license
  */
 
-type Mutable<T> = { -readonly [P in keyof T]: Mutable<T[P]> };
+type Mutable<T> = { -readonly [P in keyof T]: T[P] };
 
 type RequestMethod =
   | "GET"
@@ -44,7 +44,7 @@ interface Context {
     headers: Headers;
   };
   upgrade: {
-    socket: WebSocket | undefined;
+    readonly socket: WebSocket | undefined;
     channel: string;
   };
 }
@@ -54,4 +54,4 @@ interface Session {
   set: (ctx: Context, key: string, value: unknown) => void | Promise<void>;
 }
 
-export type { Context, Session };
+export type { Context, Mutable, Session };

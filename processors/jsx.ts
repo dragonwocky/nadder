@@ -20,6 +20,26 @@ declare global {
   }
 }
 
+const selfClosingTags = [
+  "area",
+  "base",
+  "basefont",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "keygen",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "spacer",
+  "track",
+  "wbr",
+];
+
 const renderToString = ($: JSX.Node, parentType = ""): string => {
   if ($ === undefined || $ === null) return "";
   if (typeof $ === "string") {
@@ -35,25 +55,7 @@ const renderToString = ($: JSX.Node, parentType = ""): string => {
     innerHTML = $.children.map(($child) => renderToString($child, $.type)).join(
       "",
     );
-  return [
-      "area",
-      "base",
-      "basefont",
-      "br",
-      "col",
-      "embed",
-      "hr",
-      "img",
-      "input",
-      "keygen",
-      "link",
-      "meta",
-      "param",
-      "source",
-      "spacer",
-      "track",
-      "wbr",
-    ].includes($.type)
+  return selfClosingTags.includes($.type)
     ? `<${$.type}${attrs}/>`
     : `<${$.type}${attrs}>${innerHTML}</${$.type}>`;
 };
@@ -70,6 +72,7 @@ const h = (
     : { type, props, children };
 };
 
+// todo: experiment with frag vs fragfactory
 const jsxFrag = (_: unknown, children: JSX.Node[]) => children;
 
 const jsxToString = (
