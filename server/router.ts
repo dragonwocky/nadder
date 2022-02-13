@@ -4,24 +4,26 @@
  * (https://github.com/dragonwocky/nadder) under the MIT license
  */
 
-import type { Context } from "../types.ts";
+import type { Callback, RequestMethod } from "../types.ts";
 
-const router = {
-  get: () => {},
-  post: () => {},
-  patch: () => {},
-  put: () => {},
-  delete: () => {},
-  socket: () => {},
+const routes: { [k in RequestMethod]?: [URLPattern, Callback][] } = {};
+
+const getRoute = (method: RequestMethod, href: string) => {
+  const route = routes[method]?.find?.(([pattern, _]) => pattern.test(href));
+  if (!route) return undefined;
+  return {
+    callback: route[1],
+    pathParams: route[0].exec(href)?.pathname?.groups ?? {},
+  };
 };
 
-export { router };
-// const _routes: { [k in HTTPMethod]?: [URLPattern, RouteHandler][] } = {};
-// export const route = (
-//   method: HTTPMethod,
-//   route: string,
-//   handler: RouteHandler,
-// ) => {
-//   if (!_routes[method]) _routes[method] = [];
-//   _routes[method]!.push([new URLPattern({ pathname: route }), handler]);
-// };
+const handleRoute = (
+  method: RequestMethod,
+  path: string,
+  callback: Callback,
+) => {
+  if (!routes[method]) routes[method] = [];
+  routes[method]!.push([new URLPattern({ pathname: path }), callback]);
+};
+
+export { getRoute, handleRoute };

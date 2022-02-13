@@ -4,20 +4,24 @@
  * (https://github.com/dragonwocky/nadder) under the MIT license
  */
 
-import type { Context, Mutable } from "../types.ts";
+import type { Context, Mutable, RequestMethod } from "../types.ts";
 import { getCookies, HTTPStatus, stdServe } from "../deps.ts";
-import { statusResponse } from "../response/status.ts";
+import { statusResponse } from "../responses/status.ts";
+import { getRoute } from "./router.ts";
+import { callMiddleware } from "./middleware.ts";
 
-export const serve = (port = 3000, log = console.log) => {
+const listenAndServe = (port = 3000, log = console.log) => {
   log("");
   log(`✨ server started at http://localhost:${port}/`);
   log("listening for requests...");
   log("");
   stdServe(async (req, conn) => {
+    let override: Response | undefined, socket: WebSocket | undefined;
+
     const url = new URL(req.url),
       ctx: Mutable<Context> = {
         req: {
-          method: req.method as Context["req"]["method"],
+          method: req.method as RequestMethod,
           ip: (conn.remoteAddr as Deno.NetAddr).hostname,
           url,
           body: undefined,
@@ -30,9 +34,18 @@ export const serve = (port = 3000, log = console.log) => {
           body: "",
           status: HTTPStatus.OK,
           headers: new Headers(),
+          sent: false,
         },
         upgrade: {
-          socket: undefined,
+          available: req.headers.get("upgrade") === "websocket",
+          socket: () => {
+            if (!ctx.upgrade.available) return undefined;
+            if (socket || ctx.res.sent) return socket;
+            const upgrade = Deno.upgradeWebSocket(req);
+            socket = upgrade.socket;
+            override = upgrade.response;
+            return socket;
+          },
           channel: "",
         },
       };
@@ -52,40 +65,29 @@ export const serve = (port = 3000, log = console.log) => {
         } else if (isText) {
           ctx.req.body = await req.text();
         } else if (isFormData) {
-          ctx.req.body = Object.fromEntries((await req.formData()).entries());
+          ctx.req.body = await req.formData();
         } else ctx.req.body = await req.blob();
       }
 
-      // const ws = _ws.find(([pattern, _handler]) => {
-      //   return pattern.test(ctx.req.url.href);
-      // });
-      // if (ws && req.headers.get("upgrade") === "websocket") {
-      //   const { socket, response } = Deno.upgradeWebSocket(req),
-      //     [pattern, handler] = ws;
-      //   ctx.req.pathParams = pattern.exec(ctx.req.url.href)?.pathname.groups ??
-      //     {};
-      //   await handler({ req: ctx.req, socket });
-      //   return response;
-      // }
+      const route = getRoute(ctx.req.method, ctx.req.url.href);
+      if (route) {
+        ctx.req.pathParams = route.pathParams;
+        await route.callback(ctx);
+      } else statusResponse(ctx, HTTPStatus.NotFound);
 
-      // if (!_routes[ctx.req.method]) _routes[ctx.req.method] = [];
-      // const route = _routes[ctx.req.method]!.find(([pattern, _handler]) => {
-      //   return pattern.test(ctx.req.url.href);
-      // });
-      // if (route) {
-      //   const [pattern, handler] = route;
-      //   ctx.req.pathParams = pattern.exec(ctx.req.url.href)?.pathname.groups ??
-      //     {};
-      //   await handler(ctx);
-      // } else statusResponse(ctx, HTTPStatus.NotFound);
+      await callMiddleware(ctx);
     } catch (err) {
       log(`[${ctx.req.ip}]`, err);
       statusResponse(ctx, HTTPStatus.InternalServerError);
     }
 
-    return new Response(ctx.res.body, {
+    (ctx.res as Mutable<Context["res"]>).sent = true;
+    Object.freeze(ctx.res);
+    return override ?? new Response(ctx.res.body, {
       status: ctx.res.status,
       headers: ctx.res.headers,
     });
   }, { port });
 };
+
+export { listenAndServe };

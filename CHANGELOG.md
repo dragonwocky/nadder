@@ -4,11 +4,17 @@
 
 ### Added
 
+- `markResponseForDownload(ctx)` helper.
+- `useMiddleware` core extension (registers route-inspecific callbacks, always
+  called _after_ any available route handlers).
+
 ### Changed
 
 - Replaced the [Windi CSS](http://windicss.org/) engine with
   an [Uno CSS](https://github.com/unocss/unocss) engine.
-- Restructured/restributed source code into a more modularised form.
+- Restructured/restributed source code and exports into a more modularised form:
+  route and middleware registration is handled by the `default` export,
+  helpers are provided as named exports.
 
 ### Fixed
 

@@ -6,14 +6,47 @@
 
 type Mutable<T> = { -readonly [P in keyof T]: T[P] };
 
+// https://www.iana.org/assignments/http-methods/http-methods.xhtml
 type RequestMethod =
+  | "ACL"
+  | "BASELINE-CONTROL"
+  | "BIND"
+  | "CHECKIN"
+  | "CHECKOUT"
+  | "CONNECT"
+  | "COPY"
+  | "DELETE"
   | "GET"
   | "HEAD"
-  | "POST"
+  | "LABEL"
+  | "LINK"
+  | "LOCK"
+  | "MERGE"
+  | "MKACTIVITY"
+  | "MKCALENDAR"
+  | "MKCOL"
+  | "MKREDIRECTREF"
+  | "MKWORKSPACE"
+  | "MOVE"
+  | "OPTIONS"
+  | "ORDERPATCH"
   | "PATCH"
+  | "POST"
+  | "PRI"
+  | "PROPFIND"
+  | "PROPPATCH"
   | "PUT"
-  | "DELETE"
-  | "SOCKET";
+  | "REBIND"
+  | "REPORT"
+  | "SEARCH"
+  | "TRACE"
+  | "UNBIND"
+  | "UNCHECKOUT"
+  | "UNLINK"
+  | "UNLOCK"
+  | "UPDATE"
+  | "UPDATEREDIRECTREF"
+  | "VERSION-CONTROL";
 
 type RequestBody =
   | string
@@ -26,6 +59,8 @@ type RequestBody =
   | FormData
   | Blob
   | ArrayBuffer;
+
+type Callback = (ctx: Context) => void | Promise<void>;
 
 interface Context {
   readonly req: {
@@ -42,9 +77,11 @@ interface Context {
     body: BodyInit;
     status: number;
     headers: Headers;
+    readonly sent: boolean;
   };
   upgrade: {
-    readonly socket: WebSocket | undefined;
+    readonly available: boolean;
+    readonly socket: () => WebSocket | undefined;
     channel: string;
   };
 }
@@ -54,4 +91,4 @@ interface Session {
   set: (ctx: Context, key: string, value: unknown) => void | Promise<void>;
 }
 
-export type { Context, Mutable, Session };
+export type { Callback, Context, Mutable, RequestBody, RequestMethod, Session };
