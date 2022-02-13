@@ -4,7 +4,7 @@
  * (https://github.com/dragonwocky/nadder) under the MIT license
  */
 
-import { escapeHtml } from "../util.ts";
+import { escapeHtml } from "../../util.ts";
 
 declare global {
   namespace JSX {
