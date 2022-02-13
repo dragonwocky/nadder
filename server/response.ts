@@ -33,13 +33,20 @@ const htmlResponse = (ctx: Context, html: string) => {
   ctx.res.headers.set("content-type", contentType("html")!);
 };
 
-const fileResponse = async (ctx: Context, filepath: string) => {
+const fileResponse = async (
+  ctx: Context,
+  filepath: string,
+  { streamFile = true, mimeLookup = path.basename(filepath) } = {},
+) => {
   try {
     const stat = await Deno.stat(filepath);
     if (stat.isDirectory) filepath = path.join(filepath, "index.html");
-    const file = await Deno.open(filepath, { read: true });
-    ctx.res.body = readableStreamFromReader(file);
-    ctx.res.headers.set("content-type", contentType(path.basename(filepath))!);
+    if (streamFile) {
+      const file = await Deno.open(filepath, { read: true });
+      ctx.res.body = readableStreamFromReader(file);
+      file.close();
+    } else ctx.res.body = await Deno.readTextFile(filepath);
+    ctx.res.headers.set("content-type", contentType(mimeLookup)!);
     ctx.res.status = HTTPStatus.OK;
   } catch {
     statusResponse(ctx, HTTPStatus.NotFound);
