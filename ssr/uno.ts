@@ -4,13 +4,8 @@
  * (https://github.com/dragonwocky/nadder) under the MIT license
  */
 
-import {
-  initUno,
-  modernNormalize,
-  unoPreset,
-  unoTypography,
-} from "../../deps.ts";
-import { reduceTemplate } from "../../util.ts";
+import { initUno, modernNormalize, unoPreset, unoTypography } from "../deps.ts";
+import { reduceTemplate } from "../util.ts";
 
 const expandGroups = (className: string) => {
   // e.g. font-(bold mono) m(y-4 x-3) dark:(font-blue hover:(p-8 h-full))

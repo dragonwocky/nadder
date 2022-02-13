@@ -6,7 +6,7 @@
 
 import type { Context, Mutable, RequestMethod } from "../types.ts";
 import { getCookies, HTTPStatus, stdServe } from "../deps.ts";
-import { statusResponse } from "../responses/status.ts";
+import { statusResponse } from "./response.ts";
 import { getRoute } from "./router.ts";
 import { callMiddleware } from "./middleware.ts";
 

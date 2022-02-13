@@ -4,7 +4,7 @@
  * (https://github.com/dragonwocky/nadder) under the MIT license
  */
 
-import { escapeHtml } from "../../util.ts";
+import { escapeHtml } from "../util.ts";
 
 declare global {
   namespace JSX {
@@ -72,7 +72,6 @@ const h = (
     : { type, props, children };
 };
 
-// todo: experiment with frag vs fragfactory
 const jsxFrag = (_: unknown, children: JSX.Node[]) => children;
 
 const jsxToString = (
