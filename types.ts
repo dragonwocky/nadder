@@ -4,49 +4,20 @@
  * (https://github.com/dragonwocky/nadder) under the MIT license
  */
 
+import { HTTPStatus } from "./deps.ts";
+
 type Mutable<T> = { -readonly [P in keyof T]: T[P] };
 
-// https://www.iana.org/assignments/http-methods/http-methods.xhtml
-type RequestMethod =
-  | "ACL"
-  | "BASELINE-CONTROL"
-  | "BIND"
-  | "CHECKIN"
-  | "CHECKOUT"
-  | "CONNECT"
-  | "COPY"
-  | "DELETE"
-  | "GET"
-  | "HEAD"
-  | "LABEL"
-  | "LINK"
-  | "LOCK"
-  | "MERGE"
-  | "MKACTIVITY"
-  | "MKCALENDAR"
-  | "MKCOL"
-  | "MKREDIRECTREF"
-  | "MKWORKSPACE"
-  | "MOVE"
-  | "OPTIONS"
-  | "ORDERPATCH"
-  | "PATCH"
-  | "POST"
-  | "PRI"
-  | "PROPFIND"
-  | "PROPPATCH"
-  | "PUT"
-  | "REBIND"
-  | "REPORT"
-  | "SEARCH"
-  | "TRACE"
-  | "UNBIND"
-  | "UNCHECKOUT"
-  | "UNLINK"
-  | "UNLOCK"
-  | "UPDATE"
-  | "UPDATEREDIRECTREF"
-  | "VERSION-CONTROL";
+// full list: https://www.iana.org/assignments/http-methods/http-methods.xhtml
+const RequestMethods = [
+  "POST", // Create
+  "GET", // Read
+  "PUT", // Replace
+  "PATCH", // Update
+  "DELETE", // Delete
+  "*",
+] as const;
+type RequestMethod = typeof RequestMethods[number];
 
 type RequestBody =
   | string
@@ -78,11 +49,21 @@ interface Context {
     status: number;
     headers: Headers;
     readonly sent: boolean;
+    sendStatus: (status: HTTPStatus) => void;
+    sendJSON: (data: unknown) => void;
+    sendFile: (filepath: string) => Promise<void>;
+    sendFileStream: (filepath: string) => Promise<void>;
+    inferContentType: (lookup: string) => void;
+    markForDownload: (filename?: string) => void;
   };
   upgrade: {
     readonly available: boolean;
     readonly socket: () => WebSocket | undefined;
-    channel: string;
+    channel: {
+      readonly name: string;
+      join: (name: string) => void;
+      broadcast: (message: unknown) => void;
+    };
   };
 }
 
@@ -92,3 +73,4 @@ interface Session {
 }
 
 export type { Callback, Context, Mutable, RequestBody, RequestMethod, Session };
+export { RequestMethods };

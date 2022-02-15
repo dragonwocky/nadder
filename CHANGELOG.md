@@ -4,17 +4,17 @@
 
 ### Added
 
-- `markResponseForDownload(ctx)` helper.
-- `useMiddleware` core extension (registers route-inspecific callbacks, always
-  called _after_ any available route handlers).
+- `ctx.res.markForDownload()` helper.
+- `naddder.useMiddleware(callback)` registers route-inspecific callbacks, always
+  called _after_ any available route handlers.
 
 ### Changed
 
 - Replaced the [Windi CSS](http://windicss.org/) engine with
   an [Uno CSS](https://github.com/unocss/unocss) engine.
-- Restructured/restributed source code and exports into a more modularised form:
-  route and middleware registration is handled by the `default` export,
-  helpers are provided as named exports.
+- Response helpers are built into `ctx.res`.
+- WebSocket connections are established by upgrading a route handler,
+  instead of requiring their own separate handler.
 
 ### Fixed
 

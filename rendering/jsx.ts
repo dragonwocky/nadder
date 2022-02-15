@@ -11,7 +11,10 @@ declare global {
     type IntrinsicElements = { [k: string]: JSX.Props };
     type Props = { [k: string]: string | number | boolean };
     type Node = JSX.Element | string | number | boolean | null | undefined;
-    type Component = (props: Props, children: JSX.Node[]) => Element;
+    type Component = (
+      props: Props,
+      children: JSX.Node[],
+    ) => JSX.Element;
     interface Element {
       type: string;
       props: JSX.Props;
@@ -64,7 +67,7 @@ const h = (
   type: JSX.Element["type"] | JSX.Component,
   props: JSX.Props,
   ...children: JSX.Node[]
-): JSX.Element => {
+): JSX.Node | JSX.Node[] => {
   props = props ?? {};
   children = children.flat(Infinity);
   return type instanceof Function
@@ -72,7 +75,7 @@ const h = (
     : { type, props, children };
 };
 
-const jsxFrag = (_: unknown, children: JSX.Node[]) => children;
+const jsxFrag = (_props: JSX.Props, children: JSX.Node[]) => children;
 
 const jsxToString = (
   $: JSX.Node | JSX.Node[],
