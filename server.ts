@@ -36,6 +36,18 @@ const getRoute = (method: RequestMethod, href: string) => {
   return undefined;
 };
 
+const activeSocketConnections: Map<string, Set<WebSocket>> = new Map(),
+  removeSocketFromChannel = (name: string, socket: WebSocket) => {
+    if (!activeSocketConnections.get(name)) return;
+    activeSocketConnections.get(name)!.delete(socket);
+  },
+  addSocketToChannel = (name: string, socket: WebSocket) => {
+    if (!activeSocketConnections.get(name)) {
+      activeSocketConnections.set(name, new Set());
+    }
+    activeSocketConnections.get(name)!.add(socket);
+  };
+
 const listenAndServe = (port = 3000, log = console.log) => {
   log("");
   log(`✨ server started at http://localhost:${port}/`);
@@ -110,18 +122,47 @@ const listenAndServe = (port = 3000, log = console.log) => {
             const upgrade = Deno.upgradeWebSocket(req);
             socket = upgrade.socket;
             override = upgrade.response;
+            addSocketToChannel(ctx.upgrade.channel.name, socket);
             return socket;
           },
           channel: {
             name: "",
             join: (name) => {
+              const socket = ctx.upgrade.socket();
+              if (socket) {
+                removeSocketFromChannel(ctx.upgrade.channel.name, socket);
+                addSocketToChannel(name, socket);
+              }
               const channel =
                 (ctx.upgrade.channel as Mutable<Context["upgrade"]["channel"]>);
               channel.name = name;
             },
             broadcast: (message) => {
-              // todo
-              console.log(ctx.upgrade.channel.name, message);
+              const { name } = ctx.upgrade.channel,
+                channel = activeSocketConnections.get(name);
+              if (!channel) return;
+              const safe = typeof message === "string" ||
+                message instanceof Blob || message instanceof ArrayBuffer ||
+                message instanceof SharedArrayBuffer ||
+                message instanceof Int8Array ||
+                message instanceof Uint8Array ||
+                message instanceof Uint8ClampedArray ||
+                message instanceof Int16Array ||
+                message instanceof Uint16Array ||
+                message instanceof Int32Array ||
+                message instanceof Uint32Array ||
+                message instanceof Float32Array ||
+                message instanceof Float64Array ||
+                message instanceof BigInt64Array ||
+                message instanceof BigUint64Array ||
+                message instanceof DataView;
+              if (!safe) message = JSON.stringify(message);
+              const data = message as
+                | string
+                | Blob
+                | ArrayBufferView
+                | ArrayBufferLike;
+              for (const s of channel) s.send(data);
             },
           },
         },

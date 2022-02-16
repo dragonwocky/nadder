@@ -33,6 +33,13 @@ nadder.handleRoute("GET", "/{index.html}?", async (ctx) => {
     </>,
   );
   ctx.res.inferContentType("html");
+
+  const socket = ctx.upgrade.socket();
+  if (!socket) return;
+  socket.onmessage = (ev) => {
+    if (ev.data === "channel") ctx.upgrade.channel.join("channel2");
+    ctx.upgrade.channel.broadcast(ev.data);
+  };
 });
 
 nadder.listenAndServe();

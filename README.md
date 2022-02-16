@@ -1,8 +1,10 @@
 # 🐍 nadder
 
-**nadder** is an opinionated HTTP/WebSocket server framework.
+**nadder** is an opinionated HTTP/WebSocket server framework for Deno.
+
 It includes **[URL Pattern](https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API)**
 routing, post-route middleware, helpers for creating/reading/manipulating cookies and responses,
+upgrading HTTP connections to WebSocket connections (inc. sorting into channels),
 **PostgreSQL** (or in-memory) session storage (inc. garbage collection and expiry), a React-free
 **JSX transformer** and atomic CSS with [**Uno**](https://github.com/unocss/unocss).
 

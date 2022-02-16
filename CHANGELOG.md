@@ -9,6 +9,7 @@
   called _after_ any available route handlers.
 - `Document` wrapper for JSX pages (inc. doctype, head, and body markup and
   class transformation with [Uno CSS](https://github.com/unocss/unocss)).
+- WebSocket connections can be grouped into channels for message broadcasting.
 
 ### Changed
 
