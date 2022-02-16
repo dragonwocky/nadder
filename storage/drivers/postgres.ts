@@ -7,11 +7,11 @@
 import { postgres } from "../../deps.ts";
 
 const postgresConnection = ({
-  user = "postgres",
+  user = Deno.env.get("POSTGRES_USER") ?? "postgres",
   password = Deno.env.get("POSTGRES_PWD"),
   hostname = Deno.env.get("POSTGRES_HOST"),
-  port = "6543",
-  database = "postgres",
+  port = Deno.env.get("POSTGRES_PORT") ?? "6543",
+  database = Deno.env.get("POSTGRES_DB") ?? "postgres",
 } = {}) => {
   // creates lazy/on-demand connections
   // for concurrent query execution handling

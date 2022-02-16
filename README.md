@@ -1,12 +1,12 @@
 # 🐍 nadder
 
-**nadder** is an opinionated HTTP/WebSocket server framework for Deno.
+**nadder** is an opinionated web server framework for Deno.
 
-It includes **[URL Pattern](https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API)**
+It includes [URL Pattern](https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API)
 routing, post-route middleware, helpers for creating/reading/manipulating cookies and responses,
 upgrading HTTP connections to WebSocket connections (inc. sorting into channels),
-**PostgreSQL** (or in-memory) session storage (inc. garbage collection and expiry), a React-free
-**JSX transformer** and atomic CSS with [**Uno**](https://github.com/unocss/unocss).
+PostgreSQL (or in-memory) session storage (inc. garbage collection and expiry), a React-free
+JSX transformer and atomic CSS with [Uno](https://github.com/unocss/unocss).
 
 ## Quick start
 
@@ -51,12 +51,12 @@ nadder.handleRoute('GET', '/{index.html}?', async (ctx) => {
 nadder.listenAndServe();
 ```
 
-All other features are also made available as exports of the `mod.ts` file.
+All features are made available as exports of the `mod.ts` file
+and documented in the `types.ts` file.
 
 For convenience, the following dependencies are re-exported:
 
 - `setCookie`, `deleteCookie`, `Cookie`, `HTTPStatus` and `HTTPStatusText` from [`std/http`](https://deno.land/std/http).
-- `contentType` from [`https://deno.land/x/media_types`](https://deno.land/x/media_types)
 
 ---
 

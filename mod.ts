@@ -6,7 +6,6 @@
 
 export * as default from "./server.ts";
 
-export { contentType } from "./deps.ts";
 export { HTTPStatus, HTTPStatusText } from "./deps.ts";
 export { deleteCookie, setCookie } from "./deps.ts";
 
