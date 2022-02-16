@@ -7,6 +7,8 @@
 - `ctx.res.markForDownload()` helper.
 - `naddder.useMiddleware(callback)` registers route-inspecific callbacks, always
   called _after_ any available route handlers.
+- `Document` wrapper for JSX pages (inc. doctype, head, and body markup and
+  class transformation with [Uno CSS](https://github.com/unocss/unocss)).
 
 ### Changed
 

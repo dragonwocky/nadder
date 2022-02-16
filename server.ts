@@ -70,11 +70,13 @@ const listenAndServe = (port = 3000, log = console.log) => {
             if (data instanceof Map || data instanceof Set) data = [...data];
             ctx.res.body = JSON.stringify(data, null, 2);
             ctx.res.inferContentType("json");
+            ctx.res.sendStatus(HTTPStatus.OK);
           },
           sendFile: async (filepath) => {
             try {
               ctx.res.body = await Deno.readTextFile(filepath);
               ctx.res.inferContentType(path.basename(filepath));
+              ctx.res.sendStatus(HTTPStatus.OK);
             } catch {
               ctx.res.sendStatus(HTTPStatus.NotFound);
             }
@@ -85,6 +87,7 @@ const listenAndServe = (port = 3000, log = console.log) => {
               ctx.res.body = readableStreamFromReader(file);
               file.close();
               ctx.res.inferContentType(path.basename(filepath));
+              ctx.res.sendStatus(HTTPStatus.OK);
             } catch {
               ctx.res.sendStatus(HTTPStatus.NotFound);
             }
