@@ -1,20 +1,74 @@
-/**
- * nadder
- * (c) 2022 dragonwocky <thedragonring.bod@gmail.com> (https://dragonwocky.me/)
- * (https://github.com/dragonwocky/nadder) under the MIT license
- */
+/*! mit license (c) dragonwocky <thedragonring.bod@gmail.com> (https://dragonwocky.me/) */
 
-import type { Callback, Context, Mutable, RequestMethod } from "./types.ts";
-import { RequestMethods } from "./types.ts";
 import {
+  basename,
   contentType,
   getCookies,
   HTTPStatus,
   HTTPStatusText,
-  path,
   readableStreamFromReader,
-  stdServe,
+  serve,
 } from "./deps.ts";
+
+type Mutable<T> = { -readonly [P in keyof T]: T[P] };
+
+// https://www.iana.org/assignments/http-methods/http-methods.xhtml
+const RequestMethods = [
+  "POST", // create
+  "GET", // read
+  "PUT", // replace
+  "PATCH", // update
+  "DELETE", // delete
+  "*",
+] as const;
+type RequestMethod = typeof RequestMethods[number];
+type RequestBody =
+  | string
+  | number
+  | boolean
+  | Record<string, unknown>
+  | unknown[]
+  | null
+  | undefined
+  | FormData
+  | Blob
+  | ArrayBuffer;
+
+type Callback = (ctx: Context) => void | Promise<void>;
+interface Context {
+  readonly req: {
+    method: RequestMethod;
+    ip: string | null;
+    url: URL;
+    body: RequestBody;
+    bodyType: undefined | "json" | "text" | "formData" | "blob";
+    queryParams: URLSearchParams;
+    pathParams: Record<string, string>;
+    cookies: Record<string, string>;
+    headers: Headers;
+  };
+  res: {
+    body: BodyInit;
+    status: number;
+    headers: Headers;
+    readonly sent: boolean;
+    sendStatus: (status: HTTPStatus) => void;
+    sendJSON: (data: unknown) => void;
+    sendFile: (filepath: string) => Promise<void>;
+    sendFileStream: (filepath: string) => Promise<void>;
+    inferContentType: (lookup: string) => void;
+    markForDownload: (filename?: string) => void;
+  };
+  upgrade: {
+    readonly available: boolean;
+    readonly socket: () => WebSocket | undefined;
+    channel: {
+      readonly name: string;
+      join: (name: string) => void;
+      broadcast: (message: unknown) => void;
+    };
+  };
+}
 
 const middleware: Callback[] = [],
   useMiddleware = (callback: Callback) => middleware.push(callback);
@@ -24,17 +78,17 @@ const routes: [RequestMethod, URLPattern, Callback][] = [],
     method: RequestMethod,
     path: string,
     callback: Callback,
-  ) => routes.push([method, new URLPattern({ pathname: path }), callback]);
-
-const getRoute = (method: RequestMethod, href: string) => {
-  for (const route of routes) {
-    if (!["*", route[0]].includes(method)) continue;
-    if (!route[1].test(href)) continue;
-    const pathParams = route[1].exec(href)?.pathname?.groups ?? {};
-    return { callback: route[2], pathParams };
-  }
-  return undefined;
-};
+  ) => routes.push([method, new URLPattern({ pathname: path }), callback]),
+  getRoute = (method: RequestMethod, href: string) => {
+    href = href.replaceAll(/\/$/g, "");
+    for (const route of routes) {
+      if (!["*", route[0]].includes(method)) continue;
+      if (!route[1].test(href)) continue;
+      const pathParams = route[1].exec(href)?.pathname?.groups ?? {};
+      return { callback: route[2], pathParams };
+    }
+    return undefined;
+  };
 
 const activeSocketConnections: Map<string, Set<WebSocket>> = new Map(),
   removeSocketFromChannel = (name: string, socket: WebSocket) => {
@@ -53,7 +107,7 @@ const listenAndServe = (port = 3000, log = console.log) => {
   log(`✨ server started at http://localhost:${port}/`);
   log("listening for requests...");
   log("");
-  stdServe(async (req, conn) => {
+  serve(async (req, conn) => {
     let override: Response | undefined, socket: WebSocket | undefined;
 
     const url = new URL(req.url),
@@ -63,6 +117,7 @@ const listenAndServe = (port = 3000, log = console.log) => {
           ip: (conn.remoteAddr as Deno.NetAddr).hostname,
           url,
           body: undefined,
+          bodyType: undefined,
           queryParams: new URLSearchParams(url.search),
           pathParams: {},
           cookies: getCookies(req.headers),
@@ -82,13 +137,13 @@ const listenAndServe = (port = 3000, log = console.log) => {
             if (data instanceof Map || data instanceof Set) data = [...data];
             ctx.res.body = JSON.stringify(data, null, 2);
             ctx.res.inferContentType("json");
-            ctx.res.sendStatus(HTTPStatus.OK);
+            ctx.res.status = HTTPStatus.OK;
           },
           sendFile: async (filepath) => {
             try {
               ctx.res.body = await Deno.readTextFile(filepath);
-              ctx.res.inferContentType(path.basename(filepath));
-              ctx.res.sendStatus(HTTPStatus.OK);
+              ctx.res.inferContentType(basename(filepath));
+              ctx.res.status = HTTPStatus.OK;
             } catch {
               ctx.res.sendStatus(HTTPStatus.NotFound);
             }
@@ -97,9 +152,8 @@ const listenAndServe = (port = 3000, log = console.log) => {
             try {
               const file = await Deno.open(filepath, { read: true });
               ctx.res.body = readableStreamFromReader(file);
-              file.close();
-              ctx.res.inferContentType(path.basename(filepath));
-              ctx.res.sendStatus(HTTPStatus.OK);
+              ctx.res.inferContentType(basename(filepath));
+              ctx.res.status = HTTPStatus.OK;
             } catch {
               ctx.res.sendStatus(HTTPStatus.NotFound);
             }
@@ -181,11 +235,17 @@ const listenAndServe = (port = 3000, log = console.log) => {
               contentType.includes("multipart/form-data");
           if (isJSON) {
             ctx.req.body = await req.json();
+            ctx.req.bodyType = "json";
           } else if (isText) {
             ctx.req.body = await req.text();
+            ctx.req.bodyType = "text";
           } else if (isFormData) {
             ctx.req.body = await req.formData();
-          } else ctx.req.body = await req.blob();
+            ctx.req.bodyType = "formData";
+          } else {
+            ctx.req.body = await req.blob();
+            ctx.req.bodyType = "blob";
+          }
         }
 
         const route = getRoute(ctx.req.method, ctx.req.url.href);
@@ -211,3 +271,4 @@ const listenAndServe = (port = 3000, log = console.log) => {
 };
 
 export { handleRoute, listenAndServe, useMiddleware };
+export type { Context };
