@@ -195,8 +195,10 @@ const renderStylesheet = async (className: string) => {
         ],
         theme: unoTheme,
       }),
-      { css } = await uno.generate(className, //
-      { id: undefined, scope: undefined, minify: true });
+      { css } = await uno.generate(
+        className, //
+        { id: undefined, scope: undefined, minify: true },
+      );
     return css;
   },
   renderIsland = async ($: JSX.Element | JSX.Element[]) => {
@@ -231,22 +233,25 @@ const renderStylesheet = async (className: string) => {
 
     let className = "";
     const magicElements: Map<string, JSX.Element> = new Map(),
-      recurseNodes = ($: unknown, $parent?: JSX.Element) => {
-        if (!isElement($)) return;
-        for (const type of ["html", "head", "title", "body"]) {
-          if ($.type !== type) continue;
-          if (magicElements.has(type)) {
-            const $magic = magicElements.get(type)!;
+      magicElementTypes = ["html", "head", "title", "body"],
+      recurseNodes = (node: unknown, $parent?: JSX.Element) => {
+        if (!isElement(node)) return;
+        let $ = node;
+        const $children = [...node.children];
+        if (magicElementTypes.includes($.type)) {
+          if (magicElements.has($.type)) {
+            const $magic = magicElements.get($.type)!;
             $magic.props = { ...$magic.props, ...$.props };
             $magic.children.push(...$.children);
             $parent?.children.splice($parent.children.indexOf($), 1);
-          } else magicElements.set(type, $);
+            $ = $magic;
+          } else magicElements.set($.type, $);
         }
         if ($.props.class) {
           $.props.class = expandUtilityGroups(primitiveToString($.props.class));
           className += ` ${$.props.class}`;
         }
-        for (const $child of [...$.children]) recurseNodes($child, $);
+        for (const $child of $children) recurseNodes($child, $);
       };
     recurseNodes(Document);
 
