@@ -35,13 +35,16 @@ export { default as presetWind } from "https://cdn.skypack.dev/@unocss/preset-wi
 export { default as presetTypography } from "https://cdn.skypack.dev/@unocss/preset-typography@0.30.11";
 export { default as presetIcons } from "https://cdn.skypack.dev/@unocss/preset-icons@0.30.11";
 
+const _iconifyCache = new Map();
 export const iconifyCollections = async (...sets: string[]) => {
   const reqs = [], sourceUrl = "https://esm.sh/@iconify/json@2.1.18/json";
   for (const set of sets) {
-    reqs.push(
-      fetch(`${sourceUrl}/${set}.json`)
-        .then((res) => res.json()).then((json) => [set, json]),
-    );
+    if (!_iconifyCache.has(set)) {
+      const req = fetch(`${sourceUrl}/${set}.json`)
+        .then((res) => res.json()).then((json) => [set, json]);
+      _iconifyCache.set(set, req);
+    }
+    reqs.push(_iconifyCache.get(set));
   }
   return { collections: Object.fromEntries(await Promise.all(reqs)) };
 };

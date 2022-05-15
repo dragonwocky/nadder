@@ -180,25 +180,24 @@ const h = (
   });
 
 // configuration
-let unoTheme: unknown = undefined;
-const setTheme = (theme: unknown) => {
-  unoTheme = theme;
-  return unoTheme;
-};
+const uno = createGenerator(),
+  setTheme = async (theme?: unknown) => {
+    uno.setConfig({
+      presets: [
+        presetWind({ dark: "class", variablePrefix: "uno-" }),
+        presetIcons(await iconifyCollections("twemoji", "ph")),
+      ],
+      theme: theme ?? undefined,
+    });
+  };
+await setTheme();
 
 // renderers
 const renderStylesheet = async (className: string) => {
-    const uno = createGenerator({
-        presets: [
-          presetWind({ dark: "class", variablePrefix: "uno-" }),
-          presetIcons(await iconifyCollections("twemoji", "ph")),
-        ],
-        theme: unoTheme,
-      }),
-      { css } = await uno.generate(
-        className, //
-        { id: undefined, scope: undefined, minify: true },
-      );
+    const { css } = await uno.generate(
+      className, //
+      { id: undefined, scope: undefined, minify: true },
+    );
     return css;
   },
   renderIsland = async ($: JSX.Element | JSX.Element[]) => {
