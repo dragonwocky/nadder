@@ -30,21 +30,7 @@ export { math, mathHtml } from "https://esm.sh/micromark-extension-math@2.0.2";
 export { default as hljs } from "https://esm.sh/highlight.js@11.5.0";
 export type { HtmlExtension } from "https://esm.sh/micromark-util-types@1.0.2/index.d.ts";
 
-export { createGenerator } from "https://cdn.skypack.dev/@unocss/core@0.30.11";
-export { default as presetWind } from "https://cdn.skypack.dev/@unocss/preset-wind@0.30.11";
-export { default as presetTypography } from "https://cdn.skypack.dev/@unocss/preset-typography@0.30.11";
-export { default as presetIcons } from "https://cdn.skypack.dev/@unocss/preset-icons@0.30.11";
-
-const _iconifyCache = new Map();
-export const iconifyCollections = async (...sets: string[]) => {
-  const reqs = [], sourceUrl = "https://esm.sh/@iconify/json@2.1.18/json";
-  for (const set of sets) {
-    if (!_iconifyCache.has(set)) {
-      const req = fetch(`${sourceUrl}/${set}.json`)
-        .then((res) => res.json()).then((json) => [set, json]);
-      _iconifyCache.set(set, req);
-    }
-    reqs.push(_iconifyCache.get(set));
-  }
-  return { collections: Object.fromEntries(await Promise.all(reqs)) };
-};
+export { createGenerator } from "https://cdn.skypack.dev/@unocss/core@0.33.4";
+export { default as presetWind } from "https://cdn.skypack.dev/@unocss/preset-wind@0.33.4";
+export { default as presetTypography } from "https://cdn.skypack.dev/@unocss/preset-typography@0.33.4";
+export { default as presetIcons } from "https://cdn.skypack.dev/@unocss/preset-icons@0.33.4";

@@ -5,12 +5,7 @@
  * @jsxFrag jsxFrag
  */
 
-import {
-  createGenerator,
-  iconifyCollections,
-  presetIcons,
-  presetWind,
-} from "./deps.ts";
+import { createGenerator, presetIcons, presetWind } from "./deps.ts";
 import { transform } from "./transform.ts";
 
 declare global {
@@ -181,11 +176,17 @@ const h = (
 
 // configuration
 const uno = createGenerator(),
-  setTheme = async (theme?: unknown) => {
+  setTheme = (theme?: unknown) => {
     uno.setConfig({
       presets: [
         presetWind({ dark: "class", variablePrefix: "uno-" }),
-        presetIcons(await iconifyCollections("twemoji", "ph")),
+        presetIcons({
+          cdn: "https://esm.sh/",
+          extraProperties: {
+            "display": "inline-block",
+            "vertical-align": "middle",
+          },
+        }),
       ],
       theme: theme ?? undefined,
     });
