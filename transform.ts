@@ -175,15 +175,15 @@ const files: Map<string, [number, string]> = new Map(),
   transformFile = async (path: string) => {
     try {
       const { mtime, isFile } = await Deno.stat(path);
-      if (!isFile || !mtime) return undefined;
-      if (files.has(path)) {
+      if (!isFile) return undefined;
+      if (mtime && files.has(path)) {
         const [atime] = files.get(path)!,
           expired = mtime.getTime() !== atime;
         if (expired) files.delete(path);
       }
       if (!files.has(path)) {
         const file = await Deno.readTextFile(path);
-        files.set(path, [mtime.getTime(), file]);
+        files.set(path, [mtime ? mtime.getTime() : 0, file]);
       }
       const lang = path.endsWith(".mjs") ? "js" : path.split(".").at(-1) ?? "",
         [, file] = files.get(path)!;
