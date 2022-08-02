@@ -1,6 +1,5 @@
 {
   "imports": {
-    "fresh/": "./src/",
     "std/": "https://deno.land/std@0.148.0/",
     "vue": "https://esm.sh/vue@3.2.37",
     "vue/": "https://esm.sh/vue@3.2.37/"

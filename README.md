@@ -7,7 +7,7 @@
 alt="the nadder logo: a coiled, bright red snake sticking its tongue out">
 
 **nadder** is an experimental web framework, built to find a middle ground
-between speed, reliability, simplicity, capability and extensibility. It is
+between speed, reliability, simplicity, capability and extensibility. It's
 designed for just-in-time rendering, with support for a variety of formats
 and processors.
 
