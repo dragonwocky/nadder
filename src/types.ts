@@ -1,5 +1,4 @@
 import { type ConnInfo } from "std/http/mod.ts";
-import { type VNode } from "vue";
 
 type HttpMethod =
   | "*"
@@ -12,92 +11,99 @@ type HttpMethod =
   | "OPTIONS"
   | "TRACE"
   | "PATCH";
-interface StatusResponseInit extends ResponseInit {
-  bodyInit?: BodyInit | null;
-}
 
 interface Manifest {
   routes: Record<
     string,
-    | Route
-    | { default: Middleware["handler"] }
-    | { default: ErrorHandler }
+    | Middleware
+    | Route<unknown>
+    | ErrorPage<unknown>
   >;
   // import.meta.url of manifest file (in project root)
   baseUrl: string;
-  htmlLang: string;
 }
 
-interface MiddlewareHandlerContext<State = Map<string, unknown>>
-  extends ConnInfo {
+type Promisable<T> = T | Promise<T>;
+type State = Map<string, unknown>;
+type Handler = (
+  req: Request,
+  ctx: Context,
+) => Promisable<Response>;
+interface Context extends ConnInfo {
   url: URL;
-  next: () => Response | Promise<Response>;
   state: State;
-}
-interface Middleware<State = Map<string, unknown>> {
-  pattern: URLPattern;
-  method: HttpMethod;
-  handler(
-    req: Request,
-    ctx: MiddlewareHandlerContext<State>,
-  ): Response | Promise<Response>;
-  isRouteOrFileHandler?: boolean;
+  params: Record<string, string | string[]>;
+  next?: () => ReturnType<Handler>;
+  render?: () => Promisable<string>;
 }
 
-interface RouteHandlerContext<State = Map<string, unknown>> extends ConnInfo {
-  params: Record<string, string | string[]>;
-  render: <Data>(
-    data?: Data,
-  ) => undefined | Response | Promise<Response | undefined>;
-  state: State;
-}
-type Route<State = Map<string, unknown>> =
-  & {
-    [k in HttpMethod]?: (
-      req: Request,
-      ctx: RouteHandlerContext<State>,
-    ) => Response | Promise<Response>;
-  }
+type Route<T> =
+  & { [k in HttpMethod]?: Handler }
   & {
     pattern?: URLPattern;
-    default?: <Data>(
-      props: PageProps<Data>,
-    ) => VNode;
+    isMiddleware?: false;
+    renderEngine?: Plugin<T>;
+    default?: (ctx: Context) => T;
   };
-interface PageProps<Data = unknown> {
-  url: URL;
-  params: Record<string, string | string[]>;
-  data?: Data;
+interface Middleware {
+  default: Handler;
+  isMiddleware?: true;
+}
+interface ErrorPage<T> {
+  renderEngine?: Plugin<T>;
+  default?: (ctx: Context) => T;
 }
 
-type ErrorHandler = (
-  props: ErrorHandlerProps,
-) => VNode | Response | Promise<VNode | Response>;
-interface ErrorHandlerProps {
-  url: URL;
-  error?: Error;
+interface Plugin<T> {
+  // executed once on server start
+  routeRegistrar?: (manifest: Manifest) => Route<T>[];
+  // processors and renderers are each executed once per route render
+  // multiple plugins can register processors
+
+  // pre-parses route data,
+  // e.g. to build a table-of-contents and store it in the render state
+  preRenderProcessor?: (data: T, state?: State) => Promisable<T>;
+  // executed once per render to transform route data,
+  // only one plugin's render function is executed per route
+  // e.g. to render jsx to a string
+  routeRenderer?: (data: T, state?: State) => Promisable<string>;
+  // executed once per render to post-parse a rendered route,
+  // multiple plugins can execute this on the same route
+  // e.g. to collect classnames and store generated styles in the render state
+  postRenderProcessor?: (route: string, state?: T) => Promisable<string>;
+  // executed once per render
+  templateRenderer?: (route: string, state?: T) => Promisable<Response>;
+  // executed once per file in the static/ directory
+  staticFileProcessor?: (file: StaticFile) => Promisable<StaticFile>;
+  middleware?: {
+    pattern?: URLPattern;
+    handler: Handler;
+  }[];
 }
 
 interface StaticFile {
-  localUrl: URL;
-  publicPath: string;
+  filePath: URL;
+  servePath: string;
   sizeInBytes: number;
   contentType: string;
   // hash of the file's contents
   // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
   entityTag: string;
+  // file will be served from memory instead of from the filesystem
+  // if this is set. useful for e.g. serving minified assets
+  // note: consider performance tradeoffs (e.g. reading & transpilation vs. taken up memory)
+  cachedContent?: string | Blob | BufferSource | ReadableStream<Uint8Array>;
 }
 
 export {
-  type ErrorHandler,
-  type ErrorHandlerProps,
+  type Context,
+  type ErrorPage,
+  type Handler,
   type HttpMethod,
   type Manifest,
   type Middleware,
-  type MiddlewareHandlerContext,
-  type PageProps,
+  type Plugin,
   type Route,
-  type RouteHandlerContext,
+  type State,
   type StaticFile,
-  type StatusResponseInit,
 };
