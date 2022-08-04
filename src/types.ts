@@ -16,7 +16,7 @@ interface Manifest {
   routes: Record<
     string,
     | Middleware
-    | Route<unknown>
+    | Route
     | ErrorPage<unknown>
   >;
   // import.meta.url of manifest file (in project root)
@@ -24,86 +24,117 @@ interface Manifest {
 }
 
 type Promisable<T> = T | Promise<T>;
-type State = Map<string, unknown>;
 type Handler = (
   req: Request,
-  ctx: Context,
+  ctx: HandlerContext,
 ) => Promisable<Response>;
-interface Context extends ConnInfo {
+interface HandlerContext extends ConnInfo {
   url: URL;
-  state: State;
+  state: Map<string, unknown>;
   params: Record<string, string | string[]>;
   next?: () => ReturnType<Handler>;
   render?: () => Promisable<string>;
 }
 
-type Route<T> =
+type Route =
   & { [k in HttpMethod]?: Handler }
-  & {
-    pattern?: URLPattern;
-    isMiddleware?: false;
-    renderEngine?: Plugin<T>;
-    default?: (ctx: Context) => T;
-  };
-interface Middleware {
-  default: Handler;
-  isMiddleware?: true;
-}
+  & { pattern?: URLPattern; default?: <T>(ctx: HandlerContext) => T };
+type Middleware =
+  & { isMiddleware?: true }
+  & ({ default: Handler } | { handler: Handler });
 interface ErrorPage<T> {
   renderEngine?: Plugin<T>;
-  default?: (ctx: Context) => T;
+  default?: (ctx: HandlerContext) => T;
 }
 
+type PluginContext =
+  & Pick<HandlerContext, "url" | "state" | "params">
+  & File;
 interface Plugin<T> {
-  // executed once on server start
-  routeRegistrar?: (manifest: Manifest) => Route<T>[];
-  // processors and renderers are each executed once per route render
-  // multiple plugins can register processors
-
-  // pre-parses route data,
-  // e.g. to build a table-of-contents and store it in the render state
-  preRenderProcessor?: (data: T, state?: State) => Promisable<T>;
-  // executed once per render to transform route data,
-  // only one plugin's render function is executed per route
-  // e.g. to render jsx to a string
-  routeRenderer?: (data: T, state?: State) => Promisable<string>;
-  // executed once per render to post-parse a rendered route,
-  // multiple plugins can execute this on the same route
-  // e.g. to collect classnames and store generated styles in the render state
-  postRenderProcessor?: (route: string, state?: T) => Promisable<string>;
-  // executed once per render
-  templateRenderer?: (route: string, state?: T) => Promisable<Response>;
-  // executed once per file in the static/ directory
+  /**
+   * specifies which routes the plugin can preprocess/render.
+   * plugin priority will be decided based on length of the ext
+   * e.g. a plugin registered to handle `.tmpl.ts` would be
+   * called before `.ts` (`*` handles all extensions)
+   */
+  targetFileExtensions?: string[];
+  /**
+   * called on targeted routes to pre-parse data, if multiple available
+   * preprocessors exist they are called in order of plugin priority
+   * (e.g. to take out frontmatter and store it in ctx.state)
+   */
+  routePreprocessor?: (data: T, ctx: PluginContext) => Promisable<T>;
+  /**
+   * called on targeted routes to transform route data. if multiple
+   * available renderers exist, the one with the highest priority is selected.
+   * this must return a html string, and may accept any input. if the route
+   * is a .ts/.js/.tsx/.jsx file, the return value of the route's default
+   * export will be passed to the renderer. if the route is any other file type,
+   * the contents of the file will be passed as a string
+   */
+  routeRenderer?: (data: T, ctx: PluginContext) => Promisable<string>;
+  /**
+   * called on every served route post-render, if multiple available
+   * postprocessors exist they are called in order of plugin priority
+   */
+  routePostprocessor?: (data: string, ctx: PluginContext) => Promisable<string>;
+  /**
+   * called once per file in the static/ directory
+   * during server startup and file indexing
+   */
   staticFileProcessor?: (file: StaticFile) => Promisable<StaticFile>;
-  middleware?: {
-    pattern?: URLPattern;
-    handler: Handler;
-  }[];
+  /**
+   * general middleware that can be programmatically registered
+   * instead of creating a _middleware.ts route (e.g. for auth)
+   */
+  middleware?: Middleware[];
 }
 
-interface StaticFile {
-  filePath: URL;
-  servePath: string;
+interface File {
+  /**
+   * the size of the file in bytes,
+   * used in generating http headers
+   */
   sizeInBytes: number;
+  /**
+   * a file url with the file's absolute path,
+   * used to read the file from the local filesystem
+   */
+  absolutePath: URL;
+  /**
+   * the file's path relative to the directory the file was read from,
+   * used as the file's public path when served
+   */
+  relativePath?: string;
+  /**
+   * used to serve files from memory instead of from the filesystem,
+   * to reduce file reads (also useful for e.g. serving minified assets)
+   */
+  cachedContent: string | Blob | BufferSource | ReadableStream<Uint8Array>;
+}
+interface StaticFile extends File {
+  /**
+   * a http content-type header value inc. mime type and encoding
+   * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Type
+   */
   contentType: string;
-  // hash of the file's contents
-  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
-  entityTag: string;
-  // file will be served from memory instead of from the filesystem
-  // if this is set. useful for e.g. serving minified assets
-  // note: consider performance tradeoffs (e.g. reading & transpilation vs. taken up memory)
-  cachedContent?: string | Blob | BufferSource | ReadableStream<Uint8Array>;
+  /**
+   * hash of the file's contents
+   * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
+   */
+  ETag: string;
 }
 
 export {
-  type Context,
   type ErrorPage,
+  type File,
   type Handler,
+  type HandlerContext,
   type HttpMethod,
   type Manifest,
   type Middleware,
   type Plugin,
+  type PluginContext,
   type Route,
-  type State,
   type StaticFile,
 };

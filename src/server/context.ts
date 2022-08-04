@@ -43,10 +43,12 @@ const removeTrailingSlashFromReqPath = (req: Request): Response | undefined => {
       });
     }
   },
-  urlPatternFromPath = (
+  createUrlPatternFromPath = (
     path: string,
     matchAllSubRoutes?: boolean,
   ): URLPattern => {
+    // from fresh/src/server/context.ts
+    // (c) 2021 Luca Casonato under the MIT license
     // filter removes e.g. starting slash or double slash
     const parts = path.split("/").filter((part) => part);
     // <path>/index.<ext> is identical to <path>.<ext>
@@ -102,7 +104,7 @@ const handleableErrorStatuses = [
       if (pathWithoutExt.endsWith("/_middleware")) {
         const module = _module as { default: Middleware["handler"] };
         middleware.push({
-          pattern: urlPatternFromPath(pathWithoutExt, true),
+          pattern: createUrlPatternFromPath(pathWithoutExt, true),
           method: "*",
           handler: module.default,
           isRouteOrFileHandler: false,
@@ -110,7 +112,7 @@ const handleableErrorStatuses = [
       } else if (!ignoredPaths.includes(pathWithoutExt)) {
         // reassign module to make properties extensible + overrideable
         const module = { ..._module } as Route,
-          pattern = module.pattern ?? urlPatternFromPath(pathWithoutExt),
+          pattern = module.pattern ?? createUrlPatternFromPath(pathWithoutExt),
           renderPage = async (props: PageProps) => {
             if (!module.default) return undefined;
             const html = await boundRender(module.default(props)),
@@ -305,6 +307,7 @@ export {
   buildStaticFileCache,
   composeMiddlewareHandlers,
   createMethodNotAllowedRes,
+  createUrlPatternFromPath,
   extractErrHandlersFromRoutes,
   filterMiddlewareByMethod,
   filterMiddlewareByPattern,
@@ -312,5 +315,4 @@ export {
   genMiddlewareFromStaticFiles,
   removeTrailingSlashFromReqPath,
   sortMiddlewarePriorityFirst,
-  urlPatternFromPath,
 };
