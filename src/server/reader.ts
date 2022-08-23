@@ -1,9 +1,23 @@
-import { walk } from "std/fs/mod.ts";
-import { contentType } from "std/media_types/mod.ts";
-import { extname, fromFileUrl, toFileUrl } from "std/path/mod.ts";
+import { walk } from "https://deno.land/std@0.150.0/fs/mod.ts";
+import { contentType } from "https://deno.land/std@0.150.0/media_types/mod.ts";
+import {
+  extname,
+  fromFileUrl,
+  toFileUrl,
+} from "https://deno.land/std@0.150.0/path/mod.ts";
 
 import { BUILD_ID } from "../constants.ts";
-import { File, Manifest, StaticFile } from "../types.ts";
+import { File } from "../types.ts";
+
+const catchFileErrors = async (handler: CallableFunction) => {
+  try {
+    return await handler();
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) {
+      // ignore
+    } else throw err;
+  }
+};
 
 const generateEtag = async (path: string) => {
     const encoder = new TextEncoder(),
@@ -21,56 +35,36 @@ const generateEtag = async (path: string) => {
     return (await Deno.stat(path)).size;
   };
 
-const readCache: Map<string, File> = new Map(),
-  readFile = async (path: string | URL): Promise<File> => {
-    if (!(path instanceof URL)) path = toFileUrl(path);
+const readCache: Map<string, Readonly<File>> = new Map(),
+  readFile = async (location: URL): Promise<File> => {
     // files are cached to reduce repeated file reads
-    if (!readCache.has(path.href)) {
-      readCache.set(path.href, {
-        absolutePath: path,
-        sizeInBytes: await getFileSize(path),
-        cachedContent: await Deno.readFile(path),
+    if (!readCache.has(location.href)) {
+      readCache.set(location.href, {
+        location,
+        type: getContentType(location.href),
+        etag: await generateEtag(location.href),
+        size: await getFileSize(location),
+        content: await Deno.readFile(location),
       });
     }
-    // returns a clone to prevent cache modification
-    return structuredClone(readCache.get(path.href)!);
+    // returns a clone to keep cache immutable
+    return { ...structuredClone(readCache.get(location.href)!), location };
   },
-  walkDirectory = async (
-    directory: string | URL,
-    baseUrl?: string,
-  ): Promise<Required<File>[]> => {
-    if (!(directory instanceof URL)) directory = new URL(directory, baseUrl);
-    const files: Required<File>[] = [];
-    try {
-      const entries = walk(fromFileUrl(directory), {
-        includeFiles: true,
-        includeDirs: false,
-        followSymlinks: false,
-      });
-      for await (const entry of entries) {
-        const filePath = toFileUrl(entry.path),
-          relativePath = filePath.href.substring(directory.href.length);
-        files.push({ relativePath, ...(await readFile(filePath)) });
+  walkDirectory = (location: URL): Promise<File[]> => {
+    return catchFileErrors(async () => {
+      const files: Promise<File>[] = [],
+        entries = walk(fromFileUrl(location), {
+          includeFiles: true,
+          includeDirs: false,
+          followSymlinks: false,
+        });
+      for await (const { path } of entries) {
+        files.push(catchFileErrors(async () => {
+          return await readFile(toFileUrl(path));
+        }));
       }
-    } catch (err) {
-      if (err instanceof Deno.errors.NotFound) {
-        // ignore
-      } else throw err;
-    }
-    return files;
+      return Promise.all(files);
+    });
   };
-
-const indexStaticFiles = async (manifest: Manifest): Promise<StaticFile[]> => {
-  const staticFiles = (await walkDirectory("./static", manifest.baseUrl));
-  return Promise.all(staticFiles.map(async (file) => ({
-    ...file,
-    contentType: getContentType(file.relativePath),
-    ETag: await generateEtag(file.relativePath),
-  }))) as Promise<StaticFile[]>;
-};
-
-const indexRouteFiles = async (manifest: Manifest) => {
-  const routeFiles = (await walkDirectory("./routes", manifest.baseUrl));
-};
 
 export { generateEtag, getContentType, getFileSize, readFile, walkDirectory };

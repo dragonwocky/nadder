@@ -1,4 +1,4 @@
-import { type ConnInfo } from "std/http/mod.ts";
+import { type ConnInfo } from "https://deno.land/std@0.150.0/http/mod.ts";
 
 type HttpMethod =
   | "*"
@@ -24,60 +24,64 @@ interface Manifest {
 }
 
 type Promisable<T> = T | Promise<T>;
+type State = Map<string, unknown>;
+type Params = Record<string, string | string[]>;
 type Handler = (
   req: Request,
-  ctx: HandlerContext,
+  ctx: Context<Response> & ConnInfo,
 ) => Promisable<Response>;
-interface HandlerContext extends ConnInfo {
+interface Context<T = undefined> {
   url: URL;
-  state: Map<string, unknown>;
-  params: Record<string, string | string[]>;
-  next?: () => ReturnType<Handler>;
+  state: State;
+  params: Params;
+  file: File;
+  next?: () => Promisable<T>;
   render?: () => Promisable<string>;
 }
 
 type Route =
   & { [k in HttpMethod]?: Handler }
-  & { pattern?: URLPattern; default?: <T>(ctx: HandlerContext) => T };
+  & { pattern?: URLPattern; default?: <T>(ctx: Context) => T };
 type Middleware =
-  & { isMiddleware?: true }
+  & { pattern?: URLPattern }
   & ({ default: Handler } | { handler: Handler });
 interface ErrorPage<T> {
   renderEngine?: Plugin<T>;
-  default?: (ctx: HandlerContext) => T;
+  default?: (ctx: Context<Response>) => T;
 }
 
-type PluginContext =
-  & Pick<HandlerContext, "url" | "state" | "params">
-  & File;
-interface Plugin<T> {
+interface Plugin<T = unknown> {
   /**
    * specifies which routes the plugin can preprocess/render.
-   * plugin priority will be decided based on length of the ext
-   * e.g. a plugin registered to handle `.tmpl.ts` would be
-   * called before `.ts` (`*` handles all extensions)
+   * if multiple available renderers exist, the one with the
+   * most specific extension is selected (e.g. `.tmpl.ts` > `.ts`).
+   * `*` handles all extensions but has the lowest specificity
    */
-  targetFileExtensions?: string[];
+  targetFileExtensions?: ("*" | string)[];
   /**
-   * called on targeted routes to pre-parse data, if multiple available
-   * preprocessors exist they are called in order of plugin priority
-   * (e.g. to take out frontmatter and store it in ctx.state)
+   * if the route is a `.ts`/`.js`/`.tsx`/`.jsx` file, the file's named exports
+   * (excluding http handlers and route pattern) are set to `ctx.state`.
+   * if the route is any other file type, the file's frontmatter is extracted
+   * from the file's contents and set to `ctx.state`.
+   * [default: true]
    */
-  routePreprocessor?: (data: T, ctx: PluginContext) => Promisable<T>;
+  processFileFrontmatter?: boolean;
   /**
-   * called on targeted routes to transform route data. if multiple
-   * available renderers exist, the one with the highest priority is selected.
-   * this must return a html string, and may accept any input. if the route
-   * is a .ts/.js/.tsx/.jsx file, the return value of the route's default
-   * export will be passed to the renderer. if the route is any other file type,
-   * the contents of the file will be passed as a string
+   * called on targeted routes to transform route data. if the route is a
+   * `.ts`/`.js`/`.tsx`/`.jsx` file, the renderer is passed the return value
+   * of the route's default export. if the route is any other file type, the
+   * renderer is passed the file's contents as a string. this must return
+   * a string of html
    */
-  routeRenderer?: (data: T, ctx: PluginContext) => Promisable<string>;
+  routeRenderer?: (data: T, ctx: Context) => Promisable<string>;
   /**
    * called on every served route post-render, if multiple available
-   * postprocessors exist they are called in order of plugin priority
+   * postprocessors exist they are called in order of plugin registration
    */
-  routePostprocessor?: (data: string, ctx: PluginContext) => Promisable<string>;
+  routePostprocessor?: (
+    data: string,
+    ctx: Context,
+  ) => Promisable<string>;
   /**
    * called once per file in the static/ directory
    * during server startup and file indexing
@@ -92,49 +96,48 @@ interface Plugin<T> {
 
 interface File {
   /**
-   * the size of the file in bytes,
-   * used in generating http headers
-   */
-  sizeInBytes: number;
-  /**
    * a file url with the file's absolute path,
    * used to read the file from the local filesystem
    */
-  absolutePath: URL;
+  location: URL;
   /**
-   * the file's path relative to the directory the file was read from,
-   * used as the file's public path when served
+   * the size of the file in bytes,
+   * used in generating http headers
    */
-  relativePath?: string;
-  /**
-   * used to serve files from memory instead of from the filesystem,
-   * to reduce file reads (also useful for e.g. serving minified assets)
-   */
-  cachedContent: string | Blob | BufferSource | ReadableStream<Uint8Array>;
-}
-interface StaticFile extends File {
+  size: number;
   /**
    * a http content-type header value inc. mime type and encoding
    * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Type
    */
-  contentType: string;
+  type: string;
   /**
    * hash of the file's contents
    * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
    */
-  ETag: string;
+  etag: string;
+  /**
+   * used to serve files from memory instead of from the filesystem,
+   * to reduce file reads (also useful for e.g. serving minified assets)
+   */
+  content?: string | Blob | BufferSource | ReadableStream<Uint8Array>;
+}
+interface StaticFile extends File {
+  /**
+   * the file's path relative to the static/ directory,
+   * used as the file's public path when served
+   */
+  pathname: string;
 }
 
 export {
+  type Context,
   type ErrorPage,
   type File,
   type Handler,
-  type HandlerContext,
   type HttpMethod,
   type Manifest,
   type Middleware,
   type Plugin,
-  type PluginContext,
   type Route,
   type StaticFile,
 };
