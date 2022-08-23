@@ -1,23 +1,13 @@
-import { walk } from "https://deno.land/std@0.150.0/fs/mod.ts";
-import { contentType } from "https://deno.land/std@0.150.0/media_types/mod.ts";
+import { walk } from "https://deno.land/std@0.152.0/fs/mod.ts";
+import { contentType } from "https://deno.land/std@0.152.0/media_types/mod.ts";
 import {
   extname,
   fromFileUrl,
   toFileUrl,
-} from "https://deno.land/std@0.150.0/path/mod.ts";
+} from "https://deno.land/std@0.152.0/path/mod.ts";
 
 import { BUILD_ID } from "../constants.ts";
 import { File } from "../types.ts";
-
-const catchFileErrors = async (handler: CallableFunction) => {
-  try {
-    return await handler();
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) {
-      // ignore
-    } else throw err;
-  }
-};
 
 const generateEtag = async (path: string) => {
     const encoder = new TextEncoder(),
@@ -44,11 +34,21 @@ const readCache: Map<string, Readonly<File>> = new Map(),
         type: getContentType(location.href),
         etag: await generateEtag(location.href),
         size: await getFileSize(location),
-        content: await Deno.readFile(location),
+        raw: await Deno.readFile(location),
       });
     }
     // returns a clone to keep cache immutable
     return { ...structuredClone(readCache.get(location.href)!), location };
+  };
+
+const catchFileErrors = async (handler: CallableFunction) => {
+    try {
+      return await handler();
+    } catch (err) {
+      if (err instanceof Deno.errors.NotFound) {
+        // ignore
+      } else throw err;
+    }
   },
   walkDirectory = (location: URL): Promise<File[]> => {
     return catchFileErrors(async () => {

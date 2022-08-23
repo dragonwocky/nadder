@@ -1,6 +1,6 @@
 const INTERNAL_PREFIX = "__nddr",
   ASSET_CACHE_KEY = `${INTERNAL_PREFIX}_cache`,
-  IS_SERVER = !!globalThis.Deno,
+  IS_SERVER = "Deno" in globalThis,
   IS_BROWSER = !IS_SERVER,
   // TODO(dragonwocky): get deployment id and detect if prod in-browser
   DEPLOYMENT_ID = IS_SERVER ? Deno.env.get("DENO_DEPLOYMENT_ID") : undefined,

@@ -17,7 +17,6 @@ interface Manifest {
     string,
     | Middleware
     | Route
-    | ErrorPage<unknown>
   >;
   // import.meta.url of manifest file (in project root)
   baseUrl: string;
@@ -34,57 +33,53 @@ interface Context<T = undefined> {
   url: URL;
   state: State;
   params: Params;
-  file: File;
+  file: RouteFile;
   next?: () => Promisable<T>;
   render?: () => Promisable<string>;
 }
 
 type Route =
   & { [k in HttpMethod]?: Handler }
-  & { pattern?: URLPattern; default?: <T>(ctx: Context) => T };
+  & {
+    [k: string]: unknown;
+    pattern?: URLPattern;
+    default?: <T>(ctx: Context) => T;
+  };
 type Middleware =
   & { pattern?: URLPattern }
   & ({ default: Handler } | { handler: Handler });
-interface ErrorPage<T> {
-  renderEngine?: Plugin<T>;
-  default?: (ctx: Context<Response>) => T;
-}
 
-interface Plugin<T = unknown> {
+// deno-lint-ignore no-explicit-any
+interface Plugin<T = any> {
   /**
    * specifies which routes the plugin can preprocess/render.
-   * if multiple available renderers exist, the one with the
-   * most specific extension is selected (e.g. `.tmpl.ts` > `.ts`).
-   * `*` handles all extensions but has the lowest specificity
+   * plugins are sorted from highest to lowest specificity
+   * (e.g. `.tmpl.ts` > `.ts`) to determine the order route
+   * preprocessors should be called in and which renderer should
+   * be used for a route. `*` handles all extensions but has the
+   * lowest specificity
    */
   targetFileExtensions?: ("*" | string)[];
   /**
-   * if the route is a `.ts`/`.js`/`.tsx`/`.jsx` file, the file's named exports
-   * (excluding http handlers and route pattern) are set to `ctx.state`.
-   * if the route is any other file type, the file's frontmatter is extracted
-   * from the file's contents and set to `ctx.state`.
-   * [default: true]
+   * called on targeted routes pre-render
    */
-  processFileFrontmatter?: boolean;
+  routePreprocessor?: (body: T, ctx: Context) => Promisable<T>;
   /**
    * called on targeted routes to transform route data. if the route is a
    * `.ts`/`.js`/`.tsx`/`.jsx` file, the renderer is passed the return value
-   * of the route's default export. if the route is any other file type, the
-   * renderer is passed the file's contents as a string. this must return
-   * a string of html
+   * of the route's default export with the named exports set to `ctx.state`
+   * (excluding route handlers). if the route is any other file type, the
+   * renderer is passed the file's contents as a string with any frontmatter
+   * extracted and set to `ctx.state`. this must return a string of html
    */
-  routeRenderer?: (data: T, ctx: Context) => Promisable<string>;
+  routeRenderer?: (body: T, ctx: Context) => Promisable<string>;
   /**
-   * called on every served route post-render, if multiple available
+   * called on every served route post-render. if multiple available
    * postprocessors exist they are called in order of plugin registration
    */
-  routePostprocessor?: (
-    data: string,
-    ctx: Context,
-  ) => Promisable<string>;
+  routePostprocessor?: (body: string, ctx: Context) => Promisable<string>;
   /**
-   * called once per file in the static/ directory
-   * during server startup and file indexing
+   * called once per file in the static/ directory on server startup
    */
   staticFileProcessor?: (file: StaticFile) => Promisable<StaticFile>;
   /**
@@ -116,10 +111,22 @@ interface File {
    */
   etag: string;
   /**
-   * used to serve files from memory instead of from the filesystem,
-   * to reduce file reads (also useful for e.g. serving minified assets)
+   * caches raw file contents to reduce repetitive file reads,
+   * without decoding file contents in case e.g. file is an image
    */
-  content?: string | Blob | BufferSource | ReadableStream<Uint8Array>;
+  raw: Uint8Array;
+}
+interface RouteFile extends File {
+  /**
+   * caches decoded file contents for processing frontmatter
+   * and then passing to route renderers
+   */
+  content: string;
+  /**
+   * the file's path relative to the routes/ directory,
+   * used internally for matching routes to their exports
+   */
+  pathname: string;
 }
 interface StaticFile extends File {
   /**
@@ -131,7 +138,6 @@ interface StaticFile extends File {
 
 export {
   type Context,
-  type ErrorPage,
   type File,
   type Handler,
   type HttpMethod,
@@ -139,5 +145,6 @@ export {
   type Middleware,
   type Plugin,
   type Route,
+  type RouteFile,
   type StaticFile,
 };

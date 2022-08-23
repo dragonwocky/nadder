@@ -1,7 +1,18 @@
-import { dirname } from "https://deno.land/std@0.150.0/path/mod.ts";
+import { dirname } from "https://deno.land/std@0.152.0/path/mod.ts";
+import {
+  extract as extractFrontmatter,
+  test as hasFrontmatter,
+} from "https://deno.land/std@0.151.0/encoding/front_matter.ts";
 
 import { walkDirectory } from "./reader.ts";
-import { Context, Manifest, Plugin, Route, StaticFile } from "../types.ts";
+import {
+  Context,
+  Manifest,
+  Plugin,
+  Route,
+  RouteFile,
+  StaticFile,
+} from "../types.ts";
 
 const pluginCache: Set<Plugin> = new Set(),
   registerPlugin = (plugin: Plugin) => pluginCache.add(plugin),
@@ -51,27 +62,61 @@ const indexStaticFiles = async (manifest: Manifest): Promise<StaticFile[]> => {
     return staticFiles;
   };
 
-const indexRouteFiles = async (manifest: Manifest) => {
-    const routesDirectory = new URL("./routes", manifest.baseUrl),
+const ROUTE_HANDLER_KEYS = [
+    "*",
+    "GET",
+    "HEAD",
+    "POST",
+    "PUT",
+    "DELETE",
+    "CONNECT",
+    "OPTIONS",
+    "TRACE",
+    "PATCH",
+    "default",
+    "pattern",
+  ],
+  indexRouteFiles = async (manifest: Manifest) => {
+    const textDecoder = new TextDecoder("utf-8"),
+      routesDirectory = new URL("./routes", manifest.baseUrl),
       routeFiles = (await walkDirectory(routesDirectory)).map((file) => {
-        const pathname = file.location.pathname
-          .substring(dirname(manifest.baseUrl).length);
-        return { ...file, pathname };
+        const content = textDecoder.decode(file.raw),
+          pathname = file.location.pathname
+            .substring(dirname(manifest.baseUrl).length);
+        return { ...file, content, pathname } as RouteFile;
       });
+    return routeFiles;
   },
   processRoute = async (ctx: Context, route?: Route) => {
     const routeFileBasename = ctx.file.location.pathname.split("/").at(-1)!,
       pluginsTargetingRoute = getPluginsSortedBySpecificity(routeFileBasename),
       renderEngine = pluginsTargetingRoute.find((p) => "routeRenderer" in p);
     if (!renderEngine) return undefined;
-    let data = route?.default?.(ctx) ?? ctx.file.content;
-    data = await renderEngine.routeRenderer!(data, ctx);
+    // process frontmatter
+    let body: unknown = ctx.file.content;
+    if (route) {
+      for (const k of Object.keys(route)) {
+        if (ROUTE_HANDLER_KEYS.includes(k)) continue;
+        ctx.state.set(k, route[k]);
+      }
+      body = route.default?.(ctx);
+    } else if (hasFrontmatter(ctx.file.content)) {
+      const { body: _body, attrs } = //
+        extractFrontmatter<Record<string, unknown>>(ctx.file.content);
+      for (const k of Object.keys(attrs)) ctx.state.set(k, attrs[k]);
+      body = _body;
+    }
+    // apply plugins
+    for (const plugin of pluginCache) {
+      if (!("routePreprocessor" in plugin)) continue;
+      body = await plugin.routePreprocessor!(body, ctx);
+    }
+    body = await renderEngine.routeRenderer!(body, ctx);
     for (const plugin of pluginCache) {
       if (!("routePostprocessor" in plugin)) continue;
-      data = await plugin.routePostprocessor!(data as string, ctx);
+      body = await plugin.routePostprocessor!(body as string, ctx);
     }
-    return data;
-    // processFileFrontmatter
+    return body;
   };
 
 export {
