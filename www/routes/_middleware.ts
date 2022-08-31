@@ -1,4 +1,4 @@
-import { Middleware } from "../../src/types.ts";
+import { Middleware } from "../../s"./types.ts";
 
 export default (async (_, ctx) => {
   const resp = await ctx.next();

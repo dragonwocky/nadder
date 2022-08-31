@@ -1,4 +1,4 @@
-import { type Plugin } from "../types.ts";
+import { type Plugin } from "../server/types.ts";
 
 export default {
   targetFileExtensions: [".txt"],

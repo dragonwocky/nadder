@@ -1,13 +1,6 @@
-import { walk } from "https://deno.land/std@0.152.0/fs/mod.ts";
-import { contentType } from "https://deno.land/std@0.152.0/media_types/mod.ts";
-import {
-  extname,
-  fromFileUrl,
-  toFileUrl,
-} from "https://deno.land/std@0.152.0/path/mod.ts";
-
 import { BUILD_ID } from "../constants.ts";
-import { File } from "../types.ts";
+import { contentType, extname, fromFileUrl, toFileUrl, walk } from "./deps.ts";
+import type { File } from "./types.ts";
 
 const generateEtag = async (path: string) => {
     const encoder = new TextEncoder(),

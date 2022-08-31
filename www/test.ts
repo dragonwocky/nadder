@@ -1,33 +1,21 @@
-import { type Manifest } from "../src/types.ts";
-import { plaintext } from "../src/plugins.ts";
-import {
-  indexRouteFiles,
-  indexStaticFiles,
-  processRoute,
-  processStaticFiles,
-  registerPlugin,
-} from "../src/server.ts";
-
 const manifest: Manifest = {
-  routes: {},
+  routes: {
+    "/index.ts": {},
+  },
   baseUrl: import.meta.url,
 };
+
+import { start } from "../src/server/listen.ts";
+import { registerPlugin } from "../src/server/plugins.ts";
+import plaintext from "../src/plugins/plaintext.ts";
+import type { Manifest } from "../src/server/types.ts";
 
 // const staticFiles = await processStaticFiles(await indexStaticFiles(manifest));
 
 registerPlugin({ routePostprocessor: (body) => `<b>${body}</b>` });
 registerPlugin(plaintext);
 
-const routeFiles = await indexRouteFiles(manifest);
-
-console.log(
-  await processRoute({
-    url: new URL("http://localhost/index.html"),
-    state: new Map(),
-    params: {},
-    file: routeFiles.find((r) => r.pathname.endsWith(".txt"))!,
-  }),
-);
+start(manifest);
 
 /**
  * [x] static file serving

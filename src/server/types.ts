@@ -1,4 +1,4 @@
-import { type ConnInfo } from "https://deno.land/std@0.150.0/http/mod.ts";
+import type { ConnInfo } from "./deps.ts";
 
 type HttpMethod =
   | "*"
@@ -13,13 +13,26 @@ type HttpMethod =
   | "PATCH";
 
 interface Manifest {
+  /**
+   * the exported handlers and data from within the /routes
+   * directory, generated to avoid a dependence on dynamic imports
+   */
   routes: Record<
     string,
     | Middleware
     | Route
   >;
-  // import.meta.url of manifest file (in project root)
+  /**
+   * the import.meta.url of the manifest.gen.ts file,
+   * used to determine the project root
+   */
   baseUrl: string;
+  /**
+   * a pattern tested against file paths loaded from the /routes
+   * and /static directories to filter out certain files & folders
+   * [default: \/(\.|_)]
+   */
+  ignorePattern?: RegExp;
 }
 
 type Promisable<T> = T | Promise<T>;
@@ -27,19 +40,35 @@ type State = Map<string, unknown>;
 type Params = Record<string, string | string[]>;
 type Handler = (
   req: Request,
-  ctx: Context<Response> & ConnInfo,
+  ctx: Context & ConnInfo,
 ) => Promisable<Response>;
-interface Context<T = undefined> {
+interface Context {
   url: URL;
   state: State;
   params: Params;
-  file: RouteFile;
-  next?: () => Promisable<T>;
+  file: StaticFile | RouteFile;
+  /**
+   * only available to middleware handlers,
+   * for e.g. adding headers to a response
+   */
+  next?: () => Promisable<Response>;
+  /**
+   * only available to middleware handlers,
+   * will return the route rendered to html
+   * (if it exists)
+   */
   render?: () => Promisable<string>;
 }
 
 type Route =
-  & { [k in HttpMethod]?: Handler }
+  & {
+    /**
+     * middleware handlers that will act only
+     * on this route, useful for e.g. prefetching
+     * data before route render
+     */
+    [k in HttpMethod]?: Handler;
+  }
   & {
     [k: string]: unknown;
     pattern?: URLPattern;
@@ -89,6 +118,7 @@ interface Plugin<T = any> {
   middleware?: Middleware[];
 }
 
+type Frontmatter = Record<string, unknown>;
 interface File {
   /**
    * a file url with the file's absolute path,
@@ -118,15 +148,20 @@ interface File {
 }
 interface RouteFile extends File {
   /**
-   * caches decoded file contents for processing frontmatter
-   * and then passing to route renderers
+   * caches decoded file contents for passing to route
+   * renderers with the frontmatter pre-extracted out
    */
   content: string;
   /**
-   * the file's path relative to the routes/ directory,
-   * used internally for matching routes to their exports
+   * the route's frontmatter if it is not a
+   * `.ts`/`.js`/`.tsx`/`.jsx` file
    */
-  pathname: string;
+  frontmatter?: Frontmatter;
+  /**
+   * the route's exports if it is a
+   * `.ts`/`.js`/`.tsx`/`.jsx` file
+   */
+  exports?: Route;
 }
 interface StaticFile extends File {
   /**
@@ -136,15 +171,16 @@ interface StaticFile extends File {
   pathname: string;
 }
 
-export {
-  type Context,
-  type File,
-  type Handler,
-  type HttpMethod,
-  type Manifest,
-  type Middleware,
-  type Plugin,
-  type Route,
-  type RouteFile,
-  type StaticFile,
+export type {
+  Context,
+  File,
+  Frontmatter,
+  Handler,
+  HttpMethod,
+  Manifest,
+  Middleware,
+  Plugin,
+  Route,
+  RouteFile,
+  StaticFile,
 };

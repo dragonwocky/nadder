@@ -219,92 +219,58 @@ const sortMiddlewarePriorityFirst = (middleware: Middleware[]) => {
     return handler();
   };
 
-const buildStaticFileCache = async (baseUrl: string) => {
-    const staticFolder = new URL("./static", baseUrl),
-      staticFiles: StaticFile[] = [];
-    try {
-      const encoder = new TextEncoder(),
-        entries = walk(fromFileUrl(staticFolder), {
-          includeFiles: true,
-          includeDirs: false,
-          followSymlinks: false,
-        });
-      for await (const entry of entries) {
-        const localUrl = toFileUrl(entry.path),
-          publicPath = localUrl.href.substring(staticFolder.href.length),
-          encodedPath = encoder.encode(BUILD_ID + publicPath),
-          hashedPath = await crypto.subtle.digest("SHA-1", encodedPath);
-        staticFiles.push({
-          localUrl,
-          publicPath,
-          sizeInBytes: (await Deno.stat(localUrl)).size,
-          contentType: contentType(extname(publicPath)) ??
-            "application/octet-stream",
-          entityTag: Array.from(new Uint8Array(hashedPath))
-            .map((byte) => byte.toString(16).padStart(2, "0"))
-            .join(""),
-        });
-      }
-    } catch (err) {
-      if (err instanceof Deno.errors.NotFound) {
-        // static folder missing, ignore
-      } else throw err;
-    }
-    return staticFiles;
-  },
-  genMiddlewareFromStaticFiles = (staticFiles: StaticFile[]) => {
-    const middleware: Middleware[] = [];
-    for (const staticFile of staticFiles) {
-      const pattern = new URLPattern({ pathname: staticFile.publicPath }),
-        handler = async (req: Request) => {
-          const url = new URL(req.url),
-            assetCacheBustId = url.searchParams.get(ASSET_CACHE_KEY);
-          // redirect prev. builds to uncached path
-          if (assetCacheBustId && assetCacheBustId !== BUILD_ID) {
-            url.searchParams.delete(ASSET_CACHE_KEY);
-            return new Response(null, {
-              status: Status.TemporaryRedirect,
-              headers: new Headers({ "location": url.href }),
-            });
-          }
-          // etags are used to test if cached resources have changed
-          const etag = staticFile.entityTag,
-            headers = new Headers({
-              "content-type": staticFile.contentType,
-              "vary": "If-None-Match",
-              etag,
-            });
-          // cache assets with cache key matching build id for 1 year
-          if (assetCacheBustId) {
-            const cacheControl = "public, max-age=31536000, immutable";
-            headers.set("cache-control", cacheControl);
-          }
-          // conditional request: only send response body if asset has changed
-          // i.e. if etag (based on build id) doesn't match
-          // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-None-Match
-          // https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/304
-          const cachedEtag = req.headers.get("if-none-match");
-          if (cachedEtag && compareEtag(etag, cachedEtag)) {
-            return new Response(null, { status: Status.NotModified, headers });
-          } else {
-            // stream asset directly to client, no need to pre-buffer
-            const file = await Deno.open(staticFile.localUrl);
-            headers.set("content-length", String(staticFile.sizeInBytes));
-            return new Response(file.readable, { headers });
-          }
-        };
-      middleware.push({
-        method: "GET",
-        pattern,
-        handler,
-        isRouteOrFileHandler: true,
-      });
-    }
-    return middleware;
-  };
+const genMiddlewareFromStaticFiles = (staticFiles: StaticFile[]) => {
+  const middleware: Middleware[] = [];
+  for (const staticFile of staticFiles) {
+    const pattern = new URLPattern({ pathname: staticFile.publicPath }),
+      handler = async (req: Request) => {
+        const url = new URL(req.url),
+          assetCacheBustId = url.searchParams.get(ASSET_CACHE_KEY);
+        // redirect prev. builds to uncached path
+        if (assetCacheBustId && assetCacheBustId !== BUILD_ID) {
+          url.searchParams.delete(ASSET_CACHE_KEY);
+          return new Response(null, {
+            status: Status.TemporaryRedirect,
+            headers: new Headers({ "location": url.href }),
+          });
+        }
+        // etags are used to test if cached resources have changed
+        const etag = staticFile.entityTag,
+          headers = new Headers({
+            "content-type": staticFile.contentType,
+            "vary": "If-None-Match",
+            etag,
+          });
+        // cache assets with cache key matching build id for 1 year
+        if (assetCacheBustId) {
+          const cacheControl = "public, max-age=31536000, immutable";
+          headers.set("cache-control", cacheControl);
+        }
+        // conditional request: only send response body if asset has changed
+        // i.e. if etag (based on build id) doesn't match
+        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-None-Match
+        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/304
+        const cachedEtag = req.headers.get("if-none-match");
+        if (cachedEtag && compareEtag(etag, cachedEtag)) {
+          return new Response(null, { status: Status.NotModified, headers });
+        } else {
+          // stream asset directly to client, no need to pre-buffer
+          const file = await Deno.open(staticFile.localUrl);
+          headers.set("content-length", String(staticFile.sizeInBytes));
+          return new Response(file.readable, { headers });
+        }
+      };
+    middleware.push({
+      method: "GET",
+      pattern,
+      handler,
+      isRouteOrFileHandler: true,
+    });
+  }
+  return middleware;
+};
 
 export {
-  buildStaticFileCache,
   composeMiddlewareHandlers,
   createMethodNotAllowedRes,
   createUrlPatternFromPath,
