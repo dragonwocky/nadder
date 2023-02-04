@@ -1,7 +1,0 @@
-{
-  "imports": {
-    "std/": "https://deno.land/std@0.153.0/",
-    "vue": "https://esm.sh/vue@3.2.37",
-    "vue/": "https://esm.sh/vue@3.2.37/"
-  }
-}

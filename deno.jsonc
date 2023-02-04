@@ -2,5 +2,7 @@
   "tasks": {
     "www": "deno run -A --watch=static/,routes/,data/ www/dev.ts"
   },
-  "importMap": "./import_map.json"
+  "imports": {
+    "std/": "https://deno.land/std@0.176.0/"
+  }
 }
