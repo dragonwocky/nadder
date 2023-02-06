@@ -1,21 +1,22 @@
+// import { start } from "../src/server/listen.ts";
+// import { registerPlugin } from "../src/server/plugins.ts";
+// import plaintext from "../src/plugins/plaintext.ts";
+import type { Manifest } from "nadder/types.ts";
+import { indexRoutes } from "nadder/server/context.ts";
+
 const manifest: Manifest = {
-  routes: {
-    "/index.ts": {},
-  },
-  baseUrl: import.meta.url,
+  routes: {},
+  baseUrl: new URL("./", import.meta.url),
 };
 
-import { start } from "../src/server/listen.ts";
-import { registerPlugin } from "../src/server/plugins.ts";
-import plaintext from "../src/plugins/plaintext.ts";
-import type { Manifest } from "../src/server/types.ts";
+indexRoutes(manifest);
 
 // const staticFiles = await processStaticFiles(await indexStaticFiles(manifest));
 
-registerPlugin({ routePostprocessor: (body) => `<b>${body}</b>` });
-registerPlugin(plaintext);
+// registerPlugin({ routePostprocessor: (body) => `<b>${body}</b>` });
+// registerPlugin(plaintext);
 
-start(manifest);
+// start(manifest);
 
 /**
  * [x] static file serving

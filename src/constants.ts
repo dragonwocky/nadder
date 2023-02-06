@@ -1,17 +1,13 @@
-const INTERNAL_PREFIX = "__nddr",
-  ASSET_CACHE_KEY = `${INTERNAL_PREFIX}_cache`,
-  IS_SERVER = "Deno" in globalThis,
-  IS_BROWSER = !IS_SERVER,
-  // TODO(dragonwocky): get deployment id and detect if prod in-browser
-  DEPLOYMENT_ID = IS_SERVER ? Deno.env.get("DENO_DEPLOYMENT_ID") : undefined,
-  BUILD_ID = DEPLOYMENT_ID || `${INTERNAL_PREFIX}_unknown_build`,
-  IS_PROD = !!DEPLOYMENT_ID;
-
-export {
-  ASSET_CACHE_KEY,
-  BUILD_ID,
-  INTERNAL_PREFIX,
-  IS_BROWSER,
-  IS_PROD,
-  IS_SERVER,
+let { BUILD_ID, IS_PROD } = globalThis as {
+  BUILD_ID?: string;
+  IS_PROD?: boolean;
 };
+
+const INTERNAL_PREFIX = "__nddr",
+  IS_BROWSER = !("Deno" in globalThis),
+  DEPLOYMENT_ID = IS_BROWSER ? undefined : Deno.env.get("DENO_DEPLOYMENT_ID");
+BUILD_ID ??= DEPLOYMENT_ID;
+BUILD_ID ??= `${INTERNAL_PREFIX}_${crypto.randomUUID().replace(/-/g, "")}`;
+IS_PROD ??= !!DEPLOYMENT_ID;
+
+export { BUILD_ID, INTERNAL_PREFIX, IS_BROWSER, IS_PROD };

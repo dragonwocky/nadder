@@ -1,8 +1,10 @@
 {
   "tasks": {
-    "www": "deno run -A --watch=static/,routes/,data/ www/dev.ts"
+    "www": "deno run -A --watch=static/,routes/,data/ www/dev.ts",
+    "test": "deno run -A --watch=static/,routes/,data/ www/test.ts"
   },
   "imports": {
+    "nadder/": "./src/",
     "std/": "https://deno.land/std@0.176.0/"
   }
 }

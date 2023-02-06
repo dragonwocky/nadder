@@ -1,4 +1,5 @@
 import type { ConnInfo } from "std/http/mod.ts";
+import type { ErrorStatus } from "std/http/http_status.ts";
 
 type HttpMethod =
   | "*"
@@ -19,14 +20,16 @@ interface Manifest {
    */
   routes: Record<
     string,
-    | Middleware
     | Route
+    | Middleware
+    | SharedData
+    | ErrorHandler
   >;
   /**
-   * the import.meta.url of the manifest.gen.ts file,
-   * used to determine the project root to serve from
+   * the project root to serve from, defaulting to the result of
+   * `new URL("./", import.meta.url)` of the manifest.gen.ts
    */
-  projectRoot: string;
+  baseUrl: URL;
   /**
    * a pattern tested against file paths loaded from the /routes
    * and /static directories to filter out certain files & folders
@@ -73,7 +76,7 @@ type Route =
   & {
     [k: string]: unknown;
     pattern?: URLPattern;
-    default?: <T>(ctx: Context) => T;
+    default?: (ctx: Context) => unknown;
   }
   & {
     /**
@@ -87,10 +90,15 @@ type Middleware =
    * middleware handlers defined in _middleware.* files
    * that will act on all adjacent or nested routes
    */
-  & { pattern?: URLPattern }
-  & ({ default: Handler } | { handler: Handler });
+  & ({ default: Handler } | { handler: Handler })
+  & { pattern?: URLPattern };
 
-interface Plugin<T = unknown> {
+type SharedData = { [k: string]: unknown; pattern?: URLPattern };
+type ErrorHandler =
+  & ({ default: Handler } | { handler: Handler })
+  & { pattern?: URLPattern; status?: ErrorStatus };
+
+interface Plugin {
   /**
    * specifies which routes/files the plugin can render/process.
    * processors are sorted from highest to lowest specificity
@@ -102,7 +110,7 @@ interface Plugin<T = unknown> {
   /**
    * called on targeted routes pre-render
    */
-  routePreprocessor?: (body: T, ctx: Context) => Promisable<T>;
+  routePreprocessor?: (body: unknown, ctx: Context) => Promisable<unknown>;
   /**
    * called on targeted routes to transform route data. if the route is
    * a javascript file, the renderer is passed the return value of the
@@ -111,7 +119,7 @@ interface Plugin<T = unknown> {
    * file's contents as a string with any frontmatter extracted and
    * set to `ctx.state`. this must return a string of html
    */
-  routeRenderer?: (body: T, ctx: Context) => Promisable<string>;
+  routeRenderer?: (body: unknown, ctx: Context) => Promisable<string>;
   /**
    * called on every served route post-render. if multiple available
    * postprocessors exist they are called in order of plugin registration
@@ -167,6 +175,7 @@ interface File {
 
 export type {
   Context,
+  ErrorHandler,
   File,
   Handler,
   HttpMethod,
@@ -174,4 +183,5 @@ export type {
   Middleware,
   Plugin,
   Route,
+  SharedData,
 };

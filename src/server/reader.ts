@@ -1,33 +1,29 @@
-import { BUILD_ID } from "../constants.ts";
-import { contentType, extname, fromFileUrl, toFileUrl, walk } from "./deps.ts";
-import type { File } from "./types.ts";
+import { BUILD_ID } from "nadder/constants.ts";
+import type { File } from "nadder/types.ts";
+
+import { contentType } from "std/media_types/mod.ts";
+import { extname, toFileUrl } from "std/path/mod.ts";
+import { walk } from "std/fs/mod.ts";
 
 const generateEtag = async (path: string) => {
-    const encoder = new TextEncoder(),
-      uintPath = encoder.encode(BUILD_ID + path),
-      hashedPath = await crypto.subtle.digest("SHA-1", uintPath);
-    return Array.from(new Uint8Array(hashedPath))
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("");
-  },
-  getContentType = (path: string) => {
-    return contentType(extname(path)) ??
-      "application/octet-stream";
-  },
-  getFileSize = async (path: URL) => {
-    return (await Deno.stat(path)).size;
-  };
+  const encoder = new TextEncoder(),
+    uintPath = encoder.encode(BUILD_ID + path),
+    hashedPath = await crypto.subtle.digest("SHA-1", uintPath);
+  return Array.from(new Uint8Array(hashedPath))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+};
 
-const readCache: Map<string, Readonly<File>> = new Map(),
-  readFile = async (location: URL): Promise<File> => {
+const readCache: Map<string, Readonly<Omit<File, "location">>> = new Map(),
+  readFile = async (location: URL, baseUrl: URL): Promise<File> => {
     // files are cached to reduce repeated file reads
     if (!readCache.has(location.href)) {
       readCache.set(location.href, {
-        location,
-        type: getContentType(location.href),
+        pathname: location.pathname.slice(baseUrl.pathname.length),
+        type: contentType(extname(location.href)) ?? "application/octet-stream",
         etag: await generateEtag(location.href),
-        size: await getFileSize(location),
-        raw: await Deno.readFile(location),
+        size: (await Deno.stat(location)).size,
+        content: await Deno.readFile(location),
       });
     }
     // returns a clone to keep cache immutable
@@ -39,6 +35,7 @@ const catchFileErrors = async (handler: CallableFunction) => {
       return await handler();
     } catch (err) {
       if (err instanceof Deno.errors.NotFound) {
+        console.log(err);
         // ignore
       } else throw err;
     }
@@ -46,18 +43,18 @@ const catchFileErrors = async (handler: CallableFunction) => {
   walkDirectory = (location: URL): Promise<File[]> => {
     return catchFileErrors(async () => {
       const files: Promise<File>[] = [],
-        entries = walk(fromFileUrl(location), {
+        entries = walk(location, {
           includeFiles: true,
           includeDirs: false,
           followSymlinks: false,
         });
       for await (const { path } of entries) {
         files.push(catchFileErrors(async () => {
-          return await readFile(toFileUrl(path));
+          return await readFile(toFileUrl(path), location);
         }));
       }
       return Promise.all(files);
     });
   };
 
-export { generateEtag, getContentType, getFileSize, readFile, walkDirectory };
+export { readFile, walkDirectory };

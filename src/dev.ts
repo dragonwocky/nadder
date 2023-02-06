@@ -16,7 +16,9 @@ const generateManifestFromRoutes = () => {
   },
   writeManifestToFilesystem = () => {};
 
-const dev = (base: string, entrypoint: string) => {
+const dev = (root: string, entrypoint: string) => {
+  // ...
+  import(entrypoint);
 };
 
 export { dev };
