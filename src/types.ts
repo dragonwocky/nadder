@@ -1,17 +1,19 @@
 import type { ConnInfo } from "std/http/mod.ts";
 import type { ErrorStatus } from "std/http/http_status.ts";
 
-type HttpMethod =
-  | "*"
-  | "GET"
-  | "HEAD"
-  | "POST"
-  | "PUT"
-  | "DELETE"
-  | "CONNECT"
-  | "OPTIONS"
-  | "TRACE"
-  | "PATCH";
+const HttpMethods = [
+  "*",
+  "GET",
+  "HEAD",
+  "POST",
+  "PUT",
+  "DELETE",
+  "CONNECT",
+  "OPTIONS",
+  "TRACE",
+  "PATCH",
+] as const;
+type HttpMethod = typeof HttpMethods[number];
 
 interface Manifest {
   /**
@@ -76,7 +78,13 @@ type Route =
   & {
     [k: string]: unknown;
     pattern?: URLPattern;
-    default?: (ctx: Context) => unknown;
+    default?: (ctx: Context) => Promisable<unknown>;
+    /**
+     * constructed on route registration, wraps the
+     * output of the default export with a render engine
+     * in order to return a useable string of html
+     */
+    _render?: (ctx: Context) => Promisable<string>;
   }
   & {
     /**
@@ -85,20 +93,17 @@ type Route =
      */
     [k in HttpMethod]?: Handler;
   };
-type Middleware =
+type Middleware = {
+  method?: HttpMethod;
+  pattern?: URLPattern;
   /**
-   * middleware handlers defined in _middleware.* files
-   * that will act on all adjacent or nested routes
+   * handlers defined in _middleware.* files
+   * act on all adjacent or nested routes
    */
-  & ({ default: Handler } | { handler: Handler })
-  & { pattern?: URLPattern };
+  default: Handler;
+};
 
-type SharedData = { [k: string]: unknown; pattern?: URLPattern };
-type ErrorHandler =
-  & ({ default: Handler } | { handler: Handler })
-  & { pattern?: URLPattern; status?: ErrorStatus };
-
-interface Plugin {
+type RenderEngine = {
   /**
    * specifies which routes/files the plugin can render/process.
    * processors are sorted from highest to lowest specificity
@@ -106,11 +111,7 @@ interface Plugin {
    * should be called in and which renderer should be used for
    * a route. `*` matches all files but has the lowest specificity
    */
-  targetExtensions?: ("*" | string)[];
-  /**
-   * called on targeted routes pre-render
-   */
-  routePreprocessor?: (body: unknown, ctx: Context) => Promisable<unknown>;
+  target: string;
   /**
    * called on targeted routes to transform route data. if the route is
    * a javascript file, the renderer is passed the return value of the
@@ -119,22 +120,14 @@ interface Plugin {
    * file's contents as a string with any frontmatter extracted and
    * set to `ctx.state`. this must return a string of html
    */
-  routeRenderer?: (body: unknown, ctx: Context) => Promisable<string>;
-  /**
-   * called on every served route post-render. if multiple available
-   * postprocessors exist they are called in order of plugin registration
-   */
-  routePostprocessor?: (body: string, ctx: Context) => Promisable<string>;
-  /**
-   * called on each targeted file in /static once on server startup
-   */
-  staticFileProcessor?: (body: Uint8Array) => Promisable<File["content"]>;
-  /**
-   * general middleware that can be programmatically registered
-   * instead of creating a _middleware.* route (e.g. for auth)
-   */
-  middleware?: Middleware[];
-}
+  render: (data: unknown, ctx: Context) => Promisable<string>;
+};
+/**
+ * data set in _data.* files is applied to the
+ * `ctx.state` of all adjacent or nested routes
+ */
+type SharedData = { [k: string]: unknown; pattern?: URLPattern };
+type ErrorHandler = Middleware & { status?: ErrorStatus };
 
 interface File {
   /**
@@ -173,6 +166,7 @@ interface File {
     | string;
 }
 
+export { HttpMethods };
 export type {
   Context,
   ErrorHandler,
@@ -181,7 +175,7 @@ export type {
   HttpMethod,
   Manifest,
   Middleware,
-  Plugin,
+  RenderEngine,
   Route,
   SharedData,
 };

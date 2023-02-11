@@ -1,18 +1,19 @@
 import { BUILD_ID } from "nadder/constants.ts";
 import type { File } from "nadder/types.ts";
 
-import { contentType } from "std/media_types/mod.ts";
+import { contentType as _contentType } from "std/media_types/mod.ts";
 import { extname, toFileUrl } from "std/path/mod.ts";
 import { walk } from "std/fs/mod.ts";
 
-const generateEtag = async (path: string) => {
-  const encoder = new TextEncoder(),
-    uintPath = encoder.encode(BUILD_ID + path),
-    hashedPath = await crypto.subtle.digest("SHA-1", uintPath);
-  return Array.from(new Uint8Array(hashedPath))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-};
+const contentType = (path: string) => _contentType(extname(path)),
+  generateEtag = async (path: string) => {
+    const encoder = new TextEncoder(),
+      uintPath = encoder.encode(BUILD_ID + path),
+      hashedPath = await crypto.subtle.digest("SHA-1", uintPath);
+    return Array.from(new Uint8Array(hashedPath))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+  };
 
 const readCache: Map<string, Readonly<Omit<File, "location">>> = new Map(),
   readFile = async (location: URL, baseUrl: URL): Promise<File> => {
@@ -20,7 +21,7 @@ const readCache: Map<string, Readonly<Omit<File, "location">>> = new Map(),
     if (!readCache.has(location.href)) {
       readCache.set(location.href, {
         pathname: location.pathname.slice(baseUrl.pathname.length),
-        type: contentType(extname(location.href)) ?? "application/octet-stream",
+        type: contentType(location.href) ?? "application/octet-stream",
         etag: await generateEtag(location.href),
         size: (await Deno.stat(location)).size,
         content: await Deno.readFile(location),
@@ -57,4 +58,4 @@ const catchFileErrors = async (handler: CallableFunction) => {
     });
   };
 
-export { readFile, walkDirectory };
+export { contentType, readFile, walkDirectory };
