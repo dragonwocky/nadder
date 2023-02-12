@@ -7,6 +7,7 @@ import { start } from "../src/server/listen.ts";
 const manifest: Manifest = {
   routes: {
     "/_middleware.ts": { ...await import("./routes/_middleware.ts") },
+    "/lag.ts": { ...await import("./routes/lag.ts") },
   },
   baseUrl: new URL("./", import.meta.url),
 };

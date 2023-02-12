@@ -10,6 +10,7 @@
 
 import type {
   Context,
+  Data,
   ErrorHandler,
   File,
   Handler,
@@ -17,8 +18,8 @@ import type {
   Manifest,
   Middleware,
   RenderEngine,
+  Renderer,
   Route,
-  SharedData,
 } from "../types.ts";
 import { HttpMethods } from "../types.ts";
 import { contentType, walkDirectory } from "./reader.ts";
@@ -33,6 +34,7 @@ import {
   type ErrorStatus,
   isErrorStatus,
   Status,
+  STATUS_TEXT,
 } from "std/http/http_status.ts";
 import type { ConnInfo } from "std/http/mod.ts";
 import { extname } from "std/path/mod.ts";
@@ -78,25 +80,30 @@ const pathToPattern = (path: string): URLPattern => {
     });
   };
 
-const _routes: Route[] = [],
+const _data: Data[] = [],
+  _routes: Route[] = [],
   _middleware: Middleware[] = [],
-  _sharedData: SharedData[] = [],
   _renderEngines: RenderEngine[] = [];
 // _errorHandlers: ErrorHandler[] = [];
 
-const useRoute = (route: Route) => {
+const useData = (data: Data) => {
+    data.pattern ??= new URLPattern({ pathname: "/*?" });
+    if (Object.keys(data).length < 2) return;
+    _data.push(data);
+    sortByPattern<Data[]>(_data);
+  },
+  useRoute = (route: Route) => {
+    if (!("_render" in route)) return;
     _routes.push(route);
     sortByPattern<Route[]>(_routes);
   },
-  useData = (sharedData: SharedData) => {
-    sharedData.pattern ??= new URLPattern({ pathname: "/" });
-    if (Object.keys(sharedData).length < 2) return;
-    _sharedData.push(sharedData);
-    sortByPattern<SharedData[]>(_sharedData);
-  },
   useMiddleware = (middleware: Middleware) => {
-    middleware.method ??= "*";
-    _middleware.push(middleware);
+    if (!("default" in middleware || "handler" in middleware)) return;
+    _middleware.push({
+      method: "*",
+      pattern: new URLPattern({ pathname: "/*?" }),
+      ...middleware,
+    });
     sortByPattern<Middleware[]>(_middleware);
   },
   useRenderer = (
@@ -121,42 +128,46 @@ const useRoute = (route: Route) => {
 const createRouteResponse: Handler = async (_, ctx) => {
     const html = await ctx.render!() ?? "",
       headers = new Headers({ "content-type": "text/html" });
-    console.log(html);
     return new Response(html, { status: Status.OK, headers });
   },
   // createFileResponse
   composeResponse = async (req: Request, connInfo: ConnInfo) => {
-    const url = new URL(req.url);
-    const route = _routes.find(({ pattern }) => pattern!.exec(url)),
-      data = _sharedData.filter(({ pattern }) => pattern!.exec(url)),
-      middleware = _middleware.filter(({ pattern, method }) => {
-        return pattern!.exec(url) && (["*", req.method].includes(method!));
+    const url = new URL(req.url),
+      route = _routes.find(({ pattern }) => pattern!.exec(url)),
+      data = _data.filter(({ pattern }) => pattern!.exec(url)),
+      patternMatched = _middleware.filter(({ pattern }) => pattern!.exec(url)),
+      methodMatched = patternMatched.filter((
+        { method, hasres },
+      ) => hasres && (["*", req.method].includes(method!)));
+    if (!route || !patternMatched.length) {
+      return new Response("404 Not Found", {
+        status: Status.NotFound,
+        statusText: STATUS_TEXT[Status.NotFound],
       });
-    if (!route) return Response.error();
+    }
+    if (!methodMatched.length) {
+      return new Response(`405 ${STATUS_TEXT[Status.MethodNotAllowed]}`, {
+        status: Status.MethodNotAllowed,
+        statusText: STATUS_TEXT[Status.MethodNotAllowed],
+      });
+    }
 
-    const state = new Map();
+    const ctx: Context = { url, state: new Map(), params: {}, ...connInfo };
     for (const obj of data) {
       for (const key in obj) {
         if (key === "pattern") continue;
-        state.set(key, obj[key]);
+        ctx.state.set(key, obj[key]);
       }
     }
-
-    const ctx: Context = { url, state, params: {}, ...connInfo },
-      setParams = (pattern?: URLPattern) =>
-        ctx.params = pattern?.exec(ctx.url)?.pathname.groups ?? {};
-    ctx.render = () => {
-      setParams(route.pattern);
-      return route._render?.(ctx) ?? "";
-    };
     ctx.next = () => {
-      const mw = middleware.shift()!;
-      if (!middleware.length) delete ctx.next;
-      setParams(mw.pattern);
-      return mw.default(req, ctx);
+      const mw = methodMatched.shift()!,
+        params = mw.pattern?.exec(ctx.url)?.pathname.groups ?? {},
+        handler = "handler" in mw ? mw.handler : mw.default;
+      if (!methodMatched.length) delete ctx.next;
+      return handler(req, { ...ctx, params });
     };
 
-    return (await ctx.next()) ?? Response.error();
+    return (await ctx.next()) ?? Response.json({ error: "zilch" });
   };
 
 const indexRoutes = async (manifest: Manifest) => {
@@ -165,15 +176,15 @@ const indexRoutes = async (manifest: Manifest) => {
 
   for (const { content, pathname } of files) {
     const [, status] = pathname.match(/\/_(\d+)+\.[^/]+$/) ?? [],
+      isData = /\/_data\.[^/]+$/.test(pathname),
       isMiddleware = /\/_middleware\.[^/]+$/.test(pathname),
-      isSharedData = /\/_data\.[^/]+$/.test(pathname),
       isErrorHandler = isErrorStatus(+status?.[1]);
-    if (!(isSharedData || isMiddleware || isErrorHandler)) {
+    if (!(isData || isMiddleware || isErrorHandler)) {
       if (manifest.ignorePattern?.test(pathname)) continue;
     }
 
     const ext = extname(pathname),
-      exports = manifest.routes[pathname] ?? {},
+      exports = { ...(manifest.routes[pathname] ?? {}) },
       engine: RenderEngine["render"] = _renderEngines.find(({ target }) => {
         return ext === target;
       })?.render ?? ((data) => String(data));
@@ -189,30 +200,37 @@ const indexRoutes = async (manifest: Manifest) => {
       body = _body;
     }
 
-    if (isMiddleware) {
-      console.log(exports);
-      useMiddleware(exports as Middleware);
-    } else if (isSharedData) useData(exports);
+    if (isMiddleware) useMiddleware(exports as Middleware);
+    else if (isData) useData(exports);
     else if (isErrorHandler) {
       //   (exports as ErrorHandler).status = +status;
       //   registerErrorHandler(exports as ErrorHandler);
     } else {
-      (exports as Route).GET ??= createRouteResponse;
-      const route: Route = { pattern: exports.pattern },
-        data: SharedData = {};
-      for (const key in exports) {
+      const { GET, ...route } = exports as Route, data: Data = {};
+      let render: Renderer<unknown> = () => body;
+      if ("default" in route) render = route.default as Renderer<unknown>;
+      if ("handler" in route) render = route.handler as Renderer<unknown>;
+      if (
+        [route.default, route.handler].includes(render) || GET ||
+        !manifest.routes[pathname]
+      ) {
+        route.GET = (req: Request, ctx: Context) => {
+          ctx = { ...ctx, render: () => route._render?.(ctx) ?? "" };
+          return (GET ?? createRouteResponse)(req, ctx);
+        };
+      }
+      route._render ??= (ctx: Context) => engine(render(ctx), ctx);
+      for (const key in route) {
+        if (["default", "handler", "_render"].includes(key)) continue;
         if (HttpMethods.includes(key as HttpMethod)) {
           useMiddleware({
             method: key as HttpMethod,
             pattern: route.pattern,
-            default: (exports as Route)[key] as Handler,
+            handler: route[key] as Handler,
+            hasres: true,
           });
-        } else if (key !== "default") {
-          data[key] = (exports as SharedData)[key];
-        }
+        } else data[key] = route[key];
       }
-      route._render = (ctx: Context) =>
-        engine((exports as Route).default?.(ctx) ?? body, ctx);
       useRoute(route);
       useData(data);
     }

@@ -22,9 +22,9 @@ interface Manifest {
    */
   routes: Record<
     string,
+    | Data
     | Route
     | Middleware
-    | SharedData
     | ErrorHandler
   >;
   /**
@@ -41,6 +41,7 @@ interface Manifest {
 }
 
 type Promisable<T> = T | Promise<T>;
+type Renderer<T> = (ctx: Context) => Promisable<T>;
 type Handler = (
   req: Request,
   ctx: Context,
@@ -74,34 +75,41 @@ type Context = {
   render?: () => ReturnType<RenderEngine["render"]>;
 } & ConnInfo;
 
+type Data = {
+  pattern?: URLPattern;
+  /**
+   * data set in _data.* files is applied to the
+   * `ctx.state` of all adjacent or nested routes
+   */
+  [k: string]: unknown;
+};
 type Route =
+  & ({ default?: Renderer<unknown> } | { handler?: Renderer<unknown> })
   & {
-    [k: string]: unknown;
     pattern?: URLPattern;
-    default?: (ctx: Context) => Promisable<unknown>;
     /**
      * constructed on route registration, wraps the
      * output of the default export with a render engine
      * in order to return a useable string of html
      */
-    _render?: (ctx: Context) => Promisable<string>;
-  }
-  & {
+    _render?: Renderer<string>;
     /**
-     * middleware handlers that will act only on this
-     * route (e.g. for prefetching data to store in state)
+     * data to apply to `ctx.state` on route render
      */
-    [k in HttpMethod]?: Handler;
-  };
-type Middleware = {
-  method?: HttpMethod;
-  pattern?: URLPattern;
+    [k: string]: unknown;
+  }
+  /**
+   * middleware handlers that will act only on this
+   * route (e.g. for prefetching data to store in state)
+   */
+  & { [k in HttpMethod]?: Handler };
+type Middleware =
+  & { pattern?: URLPattern; method?: HttpMethod }
   /**
    * handlers defined in _middleware.* files
    * act on all adjacent or nested routes
    */
-  default: Handler;
-};
+  & ({ default: Handler } | { handler: Handler });
 
 type RenderEngine = {
   /**
@@ -121,17 +129,6 @@ type RenderEngine = {
    * set to `ctx.state`. this must return a string of html
    */
   render: (data: unknown, ctx: Context) => Promisable<string>;
-};
-type SharedData = {
-  /**
-   * data set in _data.* files is applied to the
-   * `ctx.state` of all adjacent or nested routes
-   */
-  [k: string]: unknown;
-  /**
-   * set internally, do not use
-   */
-  pattern?: URLPattern;
 };
 type ErrorHandler = Middleware & { status?: ErrorStatus };
 
@@ -175,6 +172,7 @@ interface File {
 export { HttpMethods };
 export type {
   Context,
+  Data,
   ErrorHandler,
   File,
   Handler,
@@ -182,6 +180,6 @@ export type {
   Manifest,
   Middleware,
   RenderEngine,
+  Renderer,
   Route,
-  SharedData,
 };
