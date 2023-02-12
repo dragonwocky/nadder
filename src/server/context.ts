@@ -81,7 +81,6 @@ const pathToPattern = (path: string): URLPattern => {
   };
 
 const _data: Data[] = [],
-  _routes: Route[] = [],
   _middleware: Middleware[] = [],
   _renderEngines: RenderEngine[] = [];
 // _errorHandlers: ErrorHandler[] = [];
@@ -91,11 +90,6 @@ const useData = (data: Data) => {
     if (Object.keys(data).length < 2) return;
     _data.push(data);
     sortByPattern<Data[]>(_data);
-  },
-  useRoute = (route: Route) => {
-    if (!("_render" in route)) return;
-    _routes.push(route);
-    sortByPattern<Route[]>(_routes);
   },
   useMiddleware = (middleware: Middleware) => {
     if (!("default" in middleware || "handler" in middleware)) return;
@@ -125,49 +119,47 @@ const useData = (data: Data) => {
 //   });
 // };
 
-const createRouteResponse: Handler = async (_, ctx) => {
-    const html = await ctx.render!() ?? "",
-      headers = new Headers({ "content-type": "text/html" });
-    return new Response(html, { status: Status.OK, headers });
+const getData = (url: URL) => {
+    return _data.filter(({ pattern }) => pattern!.exec(url));
   },
-  // createFileResponse
-  composeResponse = async (req: Request, connInfo: ConnInfo) => {
-    const url = new URL(req.url),
-      route = _routes.find(({ pattern }) => pattern!.exec(url)),
-      data = _data.filter(({ pattern }) => pattern!.exec(url)),
-      patternMatched = _middleware.filter(({ pattern }) => pattern!.exec(url)),
-      methodMatched = patternMatched.filter((
-        { method, hasres },
-      ) => hasres && (["*", req.method].includes(method!)));
-    if (!route || !patternMatched.length) {
-      return new Response("404 Not Found", {
-        status: Status.NotFound,
-        statusText: STATUS_TEXT[Status.NotFound],
-      });
-    }
-    if (!methodMatched.length) {
-      return new Response(`405 ${STATUS_TEXT[Status.MethodNotAllowed]}`, {
-        status: Status.MethodNotAllowed,
-        statusText: STATUS_TEXT[Status.MethodNotAllowed],
-      });
-    }
+  getMiddleware = (url: URL) => {
+    return _middleware.filter(({ pattern }) => pattern!.exec(url));
+  };
 
-    const ctx: Context = { url, state: new Map(), params: {}, ...connInfo };
-    for (const obj of data) {
-      for (const key in obj) {
-        if (key === "pattern") continue;
-        ctx.state.set(key, obj[key]);
-      }
-    }
-    ctx.next = () => {
-      const mw = methodMatched.shift()!,
-        params = mw.pattern?.exec(ctx.url)?.pathname.groups ?? {},
-        handler = "handler" in mw ? mw.handler : mw.default;
-      if (!methodMatched.length) delete ctx.next;
-      return handler(req, { ...ctx, params });
+const errorResponse = (status: ErrorStatus) => {
+    return new Response(`${status} ${STATUS_TEXT[status]}`, {
+      status,
+      statusText: STATUS_TEXT[status],
+    });
+  },
+  composeResponse = (req: Request, connInfo: ConnInfo) => {
+    let middleware: Middleware[];
+    const ctx: Context = {
+      url: new URL(req.url),
+      state: new Map(),
+      params: {},
+      next: () => {
+        const mw = middleware.shift()!,
+          params = mw.pattern?.exec(ctx.url)?.pathname.groups ?? {},
+          handler = "handler" in mw ? mw.handler : mw.default;
+        if (!middleware.length) delete ctx.next;
+        return handler(req, { ...ctx, params });
+      },
+      ...connInfo,
     };
 
-    return (await ctx.next()) ?? Response.json({ error: "zilch" });
+    middleware = getMiddleware(ctx.url);
+    const notFound = !middleware.some((mw) => mw.initialisesResponse);
+    if (!notFound) return errorResponse(Status.NotFound);
+    middleware = middleware.filter((mw) => {
+      return ["*", req.method].includes(mw.method!);
+    });
+    const mismatchedMethod = !middleware.some((mw) => mw.initialisesResponse);
+    if (!mismatchedMethod) return errorResponse(Status.MethodNotAllowed);
+
+    const data = getData(ctx.url);
+    for (const obj of data) for (const key in obj) ctx.state.set(key, obj[key]);
+    return ctx.next!();
   };
 
 const indexRoutes = async (manifest: Manifest) => {
@@ -187,7 +179,7 @@ const indexRoutes = async (manifest: Manifest) => {
       exports = { ...(manifest.routes[pathname] ?? {}) },
       engine: RenderEngine["render"] = _renderEngines.find(({ target }) => {
         return ext === target;
-      })?.render ?? ((data) => String(data));
+      })?.render ?? ((data) => String(data ?? ""));
     let body = decoder.decode(content as Uint8Array);
     if (ext === ".json") Object.assign(exports, JSON.parse(body));
     if (ext === ".yaml") Object.assign(exports, parseYaml(body));
@@ -206,32 +198,33 @@ const indexRoutes = async (manifest: Manifest) => {
       //   (exports as ErrorHandler).status = +status;
       //   registerErrorHandler(exports as ErrorHandler);
     } else {
-      const { GET, ...route } = exports as Route, data: Data = {};
+      const data: Data = {},
+        { GET, ...route } = exports as Route,
+        isPage = GET || "default" in route || "handler" in route;
       let render: Renderer<unknown> = () => body;
       if ("default" in route) render = route.default as Renderer<unknown>;
       if ("handler" in route) render = route.handler as Renderer<unknown>;
-      if (
-        [route.default, route.handler].includes(render) || GET ||
-        !manifest.routes[pathname]
-      ) {
-        route.GET = (req: Request, ctx: Context) => {
-          ctx = { ...ctx, render: () => route._render?.(ctx) ?? "" };
-          return (GET ?? createRouteResponse)(req, ctx);
+      if (isPage || !manifest.routes[pathname]) {
+        route.GET = async (req: Request, ctx: Context) => {
+          const _render = async () => engine(await render(ctx), ctx);
+          if (GET) return GET(req, { ...ctx, render: _render });
+          const document = await _render(),
+            type = ctx.state.get("contentType") ?? "text/html",
+            headers = new Headers({ "content-type": String(type) });
+          return new Response(document, { status: Status.OK, headers });
         };
       }
-      route._render ??= (ctx: Context) => engine(render(ctx), ctx);
       for (const key in route) {
-        if (["default", "handler", "_render"].includes(key)) continue;
+        if (["default", "handler"].includes(key)) continue;
         if (HttpMethods.includes(key as HttpMethod)) {
           useMiddleware({
             method: key as HttpMethod,
             pattern: route.pattern,
             handler: route[key] as Handler,
-            hasres: true,
+            initialisesResponse: true,
           });
         } else data[key] = route[key];
       }
-      useRoute(route);
       useData(data);
     }
   }

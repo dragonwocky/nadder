@@ -88,12 +88,6 @@ type Route =
   & {
     pattern?: URLPattern;
     /**
-     * constructed on route registration, wraps the
-     * output of the default export with a render engine
-     * in order to return a useable string of html
-     */
-    _render?: Renderer<string>;
-    /**
      * data to apply to `ctx.state` on route render
      */
     [k: string]: unknown;
@@ -104,7 +98,18 @@ type Route =
    */
   & { [k in HttpMethod]?: Handler };
 type Middleware =
-  & { pattern?: URLPattern; method?: HttpMethod }
+  & {
+    pattern?: URLPattern;
+    method?: HttpMethod;
+    /**
+     * used to differentiate between pre/postprocessing
+     * middleware handlers and route/file handlers. if
+     * middleware that match the request url exist but
+     * none have this flag set, a 405 method not allowed
+     * response will be sent
+     */
+    initialisesResponse?: boolean;
+  }
   /**
    * handlers defined in _middleware.* files
    * act on all adjacent or nested routes
