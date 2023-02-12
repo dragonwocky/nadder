@@ -43,9 +43,9 @@ interface Manifest {
 type Promisable<T> = T | Promise<T>;
 type Handler = (
   req: Request,
-  ctx: Context & ConnInfo,
+  ctx: Context,
 ) => Promisable<Response>;
-interface Context {
+type Context = {
   url: URL;
   params: Record<string, string | string[]>;
   /**
@@ -65,14 +65,14 @@ interface Context {
    * only available to middleware handlers,
    * for e.g. adding headers to a response
    */
-  next?: () => Promisable<Response>;
+  next?: () => ReturnType<Handler>;
   /**
    * only available to middleware handlers when
    * responding from a registered route, returns
    * the route rendered to a string of html
    */
-  render?: () => Promisable<string>;
-}
+  render?: () => ReturnType<RenderEngine["render"]>;
+} & ConnInfo;
 
 type Route =
   & {
@@ -122,11 +122,17 @@ type RenderEngine = {
    */
   render: (data: unknown, ctx: Context) => Promisable<string>;
 };
-/**
- * data set in _data.* files is applied to the
- * `ctx.state` of all adjacent or nested routes
- */
-type SharedData = { [k: string]: unknown; pattern?: URLPattern };
+type SharedData = {
+  /**
+   * data set in _data.* files is applied to the
+   * `ctx.state` of all adjacent or nested routes
+   */
+  [k: string]: unknown;
+  /**
+   * set internally, do not use
+   */
+  pattern?: URLPattern;
+};
 type ErrorHandler = Middleware & { status?: ErrorStatus };
 
 interface File {

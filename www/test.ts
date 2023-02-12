@@ -2,14 +2,16 @@
 // import { registerPlugin } from "../src/server/plugins.ts";
 // import plaintext from "../src/plugins/plaintext.ts";
 import type { Manifest } from "nadder/types.ts";
-import { indexRoutes } from "nadder/server/context.ts";
+import { start } from "../src/server/listen.ts";
 
 const manifest: Manifest = {
-  routes: {},
+  routes: {
+    "/_middleware.ts": { ...await import("./routes/_middleware.ts") },
+  },
   baseUrl: new URL("./", import.meta.url),
 };
 
-indexRoutes(manifest);
+start({ ...manifest });
 
 // const staticFiles = await processStaticFiles(await indexStaticFiles(manifest));
 

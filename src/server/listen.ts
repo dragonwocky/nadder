@@ -1,8 +1,7 @@
-import type { ServeInit } from "./deps.ts";
-import type { Manifest } from "./types.ts";
+import type { Manifest } from "../types.ts";
 
-import { serve } from "./deps.ts";
-import { createRouteResponse, indexRoutes } from "./handlers.ts";
+import { serve, type ServeInit } from "std/http/mod.ts";
+import { composeResponse, indexRoutes } from "./context.ts";
 
 const start = async (manifest: Manifest, serveInit: ServeInit = {}) => {
   manifest.ignorePattern ??= /\/(\.|_)/g;
@@ -10,41 +9,8 @@ const start = async (manifest: Manifest, serveInit: ServeInit = {}) => {
     console.log(`Server listening on http://${hostname}:${port}/`);
   });
 
-  const routeFiles = await indexRoutes(manifest);
-
-  return serve(async (req, connInfo) => {
-    //   try {
-    //     const removeTrailingSlashesRedirect = removeTrailingSlashFromReqPath(req);
-    //     if (removeTrailingSlashesRedirect) return removeTrailingSlashesRedirect;
-
-    //     const patternMatched = filterMiddlewareByPattern(req, middleware),
-    //       methodMatched = filterMiddlewareByMethod(req, patternMatched),
-    //       patternMatchedHasRouteOrFileHandler = patternMatched
-    //         .some(({ isRouteOrFileHandler }) => isRouteOrFileHandler),
-    //       methodMatchedHasRouteOrFileHandler = methodMatched
-    //         .some(({ isRouteOrFileHandler }) => isRouteOrFileHandler),
-    //       shouldSendMethodNotAllowedResponse =
-    //         patternMatchedHasRouteOrFileHandler &&
-    //         !methodMatchedHasRouteOrFileHandler;
-    //     if (shouldSendMethodNotAllowedResponse) {
-    //       return createMethodNotAllowedRes(patternMatched);
-    //     } else if (methodMatchedHasRouteOrFileHandler) {
-    //       return composeMiddlewareHandlers(methodMatched, { req, connInfo });
-    //     } else return await onNotFound({ url: new URL(req.url) });
-    //   } catch (e) {
-    //     return await onInternalServerError({
-    //       url: new URL(req.url),
-    //       error: e instanceof Error ? e : new Error(e),
-    //     });
-    //   }
-
-    return await createRouteResponse(req, {
-      url: new URL("http://localhost/index.html"),
-      state: new Map(),
-      params: {},
-      file: routeFiles.find((r) => r.frontmatter)!,
-    });
-  }, serveInit);
+  await indexRoutes(manifest);
+  return serve(composeResponse, serveInit);
 };
 
 export { start };

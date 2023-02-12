@@ -1,7 +1,7 @@
-import { Middleware } from "$/types.ts";
+import { Middleware } from "nadder/types.ts";
 
 export default (async (_, ctx) => {
-  const resp = await ctx.next();
-  resp.headers.set("server", "nadder server");
-  return resp;
-}) as Middleware["handler"];
+  const res = await ctx.next!();
+  res.headers.set("server", "nadder server");
+  return res;
+}) as Middleware["default"];

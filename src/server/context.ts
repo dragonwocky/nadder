@@ -13,6 +13,7 @@ import type {
   ErrorHandler,
   File,
   Handler,
+  HttpMethod,
   Manifest,
   Middleware,
   RenderEngine,
@@ -26,13 +27,14 @@ import {
   extract as extractFrontmatter,
   test as hasFrontmatter,
 } from "std/encoding/front_matter/any.ts";
-import { parse as parseYaml } from "std/encoding/yaml.ts";
 import { parse as parseToml } from "std/encoding/toml.ts";
+import { parse as parseYaml } from "std/encoding/yaml.ts";
 import {
   type ErrorStatus,
   isErrorStatus,
   Status,
 } from "std/http/http_status.ts";
+import type { ConnInfo } from "std/http/mod.ts";
 import { extname } from "std/path/mod.ts";
 
 const pathToPattern = (path: string): URLPattern => {
@@ -87,11 +89,13 @@ const useRoute = (route: Route) => {
     sortByPattern<Route[]>(_routes);
   },
   useData = (sharedData: SharedData) => {
+    sharedData.pattern ??= new URLPattern({ pathname: "/" });
+    if (Object.keys(sharedData).length < 2) return;
     _sharedData.push(sharedData);
     sortByPattern<SharedData[]>(_sharedData);
   },
   useMiddleware = (middleware: Middleware) => {
-    middleware.method ??= "GET";
+    middleware.method ??= "*";
     _middleware.push(middleware);
     sortByPattern<Middleware[]>(_middleware);
   },
@@ -114,20 +118,45 @@ const useRoute = (route: Route) => {
 //   });
 // };
 
-const composeResponse = (req: Request) => {
-    const url = new URL(req.url),
-      route = _routes.find(({ pattern }) => pattern!.exec(url)),
+const createRouteResponse: Handler = async (_, ctx) => {
+    const html = await ctx.render!() ?? "",
+      headers = new Headers({ "content-type": "text/html" });
+    console.log(html);
+    return new Response(html, { status: Status.OK, headers });
+  },
+  // createFileResponse
+  composeResponse = async (req: Request, connInfo: ConnInfo) => {
+    const url = new URL(req.url);
+    const route = _routes.find(({ pattern }) => pattern!.exec(url)),
       data = _sharedData.filter(({ pattern }) => pattern!.exec(url)),
       middleware = _middleware.filter(({ pattern, method }) => {
         return pattern!.exec(url) && (["*", req.method].includes(method!));
       });
-    //
-  },
-  createRouteResponse: Handler = async (_, ctx) => {
-    const html = await ctx.render!(),
-      headers = new Headers({ "content-type": "text/html" });
-    // if (!html) return createNotFoundResponse(ctx);
-    return new Response(html, { status: Status.OK, headers });
+    if (!route) return Response.error();
+
+    const state = new Map();
+    for (const obj of data) {
+      for (const key in obj) {
+        if (key === "pattern") continue;
+        state.set(key, obj[key]);
+      }
+    }
+
+    const ctx: Context = { url, state, params: {}, ...connInfo },
+      setParams = (pattern?: URLPattern) =>
+        ctx.params = pattern?.exec(ctx.url)?.pathname.groups ?? {};
+    ctx.render = () => {
+      setParams(route.pattern);
+      return route._render?.(ctx) ?? "";
+    };
+    ctx.next = () => {
+      const mw = middleware.shift()!;
+      if (!middleware.length) delete ctx.next;
+      setParams(mw.pattern);
+      return mw.default(req, ctx);
+    };
+
+    return (await ctx.next()) ?? Response.error();
   };
 
 const indexRoutes = async (manifest: Manifest) => {
@@ -138,7 +167,7 @@ const indexRoutes = async (manifest: Manifest) => {
     const [, status] = pathname.match(/\/_(\d+)+\.[^/]+$/) ?? [],
       isMiddleware = /\/_middleware\.[^/]+$/.test(pathname),
       isSharedData = /\/_data\.[^/]+$/.test(pathname),
-      isErrorHandler = isErrorStatus(+status[1]);
+      isErrorHandler = isErrorStatus(+status?.[1]);
     if (!(isSharedData || isMiddleware || isErrorHandler)) {
       if (manifest.ignorePattern?.test(pathname)) continue;
     }
@@ -147,11 +176,12 @@ const indexRoutes = async (manifest: Manifest) => {
       exports = manifest.routes[pathname] ?? {},
       engine: RenderEngine["render"] = _renderEngines.find(({ target }) => {
         return ext === target;
-      })?.render ?? ((_, data) => String(data));
+      })?.render ?? ((data) => String(data));
     let body = decoder.decode(content as Uint8Array);
     if (ext === ".json") Object.assign(exports, JSON.parse(body));
     if (ext === ".yaml") Object.assign(exports, parseYaml(body));
     if (ext === ".toml") Object.assign(exports, parseToml(body));
+    if (!(exports.pattern instanceof URLPattern)) delete exports.pattern;
     exports.pattern ??= pathToPattern(pathname.slice(0, -ext.length));
     if (hasFrontmatter(body)) {
       const { body: _body, attrs } = extractFrontmatter(body);
@@ -159,21 +189,30 @@ const indexRoutes = async (manifest: Manifest) => {
       body = _body;
     }
 
-    if (isMiddleware) useMiddleware(exports as Middleware);
-    else if (isSharedData) useData(exports);
+    if (isMiddleware) {
+      console.log(exports);
+      useMiddleware(exports as Middleware);
+    } else if (isSharedData) useData(exports);
     else if (isErrorHandler) {
       //   (exports as ErrorHandler).status = +status;
       //   registerErrorHandler(exports as ErrorHandler);
     } else {
-      const route: Route = { GET: createRouteResponse },
+      (exports as Route).GET ??= createRouteResponse;
+      const route: Route = { pattern: exports.pattern },
         data: SharedData = {};
       for (const key in exports) {
-        if ([...HttpMethods, "default"].includes(key)) {
-          route[key] = (exports as Route)[key];
-        } else data[key] = (exports as SharedData)[key];
+        if (HttpMethods.includes(key as HttpMethod)) {
+          useMiddleware({
+            method: key as HttpMethod,
+            pattern: route.pattern,
+            default: (exports as Route)[key] as Handler,
+          });
+        } else if (key !== "default") {
+          data[key] = (exports as SharedData)[key];
+        }
       }
       route._render = (ctx: Context) =>
-        engine(route.default?.(ctx) ?? body, ctx);
+        engine((exports as Route).default?.(ctx) ?? body, ctx);
       useRoute(route);
       useData(data);
     }
@@ -183,4 +222,4 @@ const indexRoutes = async (manifest: Manifest) => {
 const indexStatic = async () => {},
   processStatic = async () => {};
 
-export { indexRoutes, useData, useMiddleware, useRenderer };
+export { composeResponse, indexRoutes, useData, useMiddleware, useRenderer };
