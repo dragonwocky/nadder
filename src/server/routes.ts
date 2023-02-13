@@ -1,29 +1,3 @@
-// import {
-//   compareEtag,
-//   contentType,
-//   dirname,
-//   extractFrontmatter,
-//   hasFrontmatter,
-//   Status,
-// } from "./deps.ts";
-// import { createNotFoundResponse } from "./errors.ts";
-
-import type {
-  Context,
-  Data,
-  ErrorHandler,
-  File,
-  Handler,
-  HttpMethod,
-  Manifest,
-  Middleware,
-  RenderEngine,
-  Renderer,
-  Route,
-} from "../types.ts";
-import { HttpMethods } from "../types.ts";
-import { contentType, walkDirectory } from "./reader.ts";
-
 import {
   extract as extractFrontmatter,
   test as hasFrontmatter,
@@ -36,8 +10,23 @@ import {
   Status,
   STATUS_TEXT,
 } from "std/http/http_status.ts";
-import type { ConnInfo } from "std/http/mod.ts";
 import { extname } from "std/path/mod.ts";
+import type {
+  Context,
+  Data,
+  ErrorHandler,
+  FileProcessor,
+  Handler,
+  HttpMethod,
+  Manifest,
+  Middleware,
+  RenderEngine,
+  Renderer,
+  Route,
+} from "../types.ts";
+import { HttpMethods } from "../types.ts";
+import { walkDirectory } from "./reader.ts";
+import { BUILD_ID, INTERNAL_PREFIX } from "../constants.ts";
 
 const pathToPattern = (path: string): URLPattern => {
     // if (ignoreExtension) path = path.slice(0, -extname(path).length);
@@ -82,7 +71,8 @@ const pathToPattern = (path: string): URLPattern => {
 
 const _data: Data[] = [],
   _middleware: Middleware[] = [],
-  _renderEngines: RenderEngine[] = [];
+  _renderEngines: RenderEngine[] = [],
+  _fileProcessors: FileProcessor[] = [];
 // _errorHandlers: ErrorHandler[] = [];
 
 const useData = (data: Data) => {
@@ -106,6 +96,13 @@ const useData = (data: Data) => {
   ) => {
     _renderEngines.push({ target, render });
     _renderEngines.sort((a, b) => a.target.localeCompare(b.target));
+  },
+  useProcessor = (
+    target: FileProcessor["target"],
+    transform: FileProcessor["transform"],
+  ) => {
+    _fileProcessors.push({ target, transform });
+    _fileProcessors.sort((a, b) => a.target.localeCompare(b.target));
   };
 // registerErrorHandler = (errorHandler: ErrorHandler) => {
 //   // innermost error handler takes priority
@@ -119,48 +116,27 @@ const useData = (data: Data) => {
 //   });
 // };
 
-const getData = (url: URL) => {
-    return _data.filter(({ pattern }) => pattern!.exec(url));
-  },
+const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
   getMiddleware = (url: URL) => {
-    return _middleware.filter(({ pattern }) => pattern!.exec(url));
+    return _middleware.filter((mw) => mw.pattern!.exec(url));
+  },
+  getRenderers = (pathname: string): RenderEngine["render"][] => {
+    return _renderEngines
+      .filter((engine) => pathname.endsWith(engine.target))
+      .map((engine) => engine.render);
+  },
+  getProcessors = (pathname: string): FileProcessor["transform"][] => {
+    return _fileProcessors
+      .filter((processor) => pathname.endsWith(processor.target))
+      .map((processor) => processor.transform);
   };
 
 const errorResponse = (status: ErrorStatus) => {
-    return new Response(`${status} ${STATUS_TEXT[status]}`, {
-      status,
-      statusText: STATUS_TEXT[status],
-    });
-  },
-  composeResponse = (req: Request, connInfo: ConnInfo) => {
-    let middleware: Middleware[];
-    const ctx: Context = {
-      url: new URL(req.url),
-      state: new Map(),
-      params: {},
-      next: () => {
-        const mw = middleware.shift()!,
-          params = mw.pattern?.exec(ctx.url)?.pathname.groups ?? {},
-          handler = "handler" in mw ? mw.handler : mw.default;
-        if (!middleware.length) delete ctx.next;
-        return handler(req, { ...ctx, params });
-      },
-      ...connInfo,
-    };
-
-    middleware = getMiddleware(ctx.url);
-    const notFound = !middleware.some((mw) => mw.initialisesResponse);
-    if (!notFound) return errorResponse(Status.NotFound);
-    middleware = middleware.filter((mw) => {
-      return ["*", req.method].includes(mw.method!);
-    });
-    const mismatchedMethod = !middleware.some((mw) => mw.initialisesResponse);
-    if (!mismatchedMethod) return errorResponse(Status.MethodNotAllowed);
-
-    const data = getData(ctx.url);
-    for (const obj of data) for (const key in obj) ctx.state.set(key, obj[key]);
-    return ctx.next!();
-  };
+  return new Response(`${status} ${STATUS_TEXT[status]}`, {
+    status,
+    statusText: STATUS_TEXT[status],
+  });
+};
 
 const indexRoutes = async (manifest: Manifest) => {
   const decoder = new TextDecoder("utf-8"),
@@ -176,10 +152,7 @@ const indexRoutes = async (manifest: Manifest) => {
     }
 
     const ext = extname(pathname),
-      exports = { ...(manifest.routes[pathname] ?? {}) },
-      engine: RenderEngine["render"] = _renderEngines.find(({ target }) => {
-        return ext === target;
-      })?.render ?? ((data) => String(data ?? ""));
+      exports = { ...(manifest.routes[pathname] ?? {}) };
     let body = decoder.decode(content as Uint8Array);
     if (ext === ".json") Object.assign(exports, JSON.parse(body));
     if (ext === ".yaml") Object.assign(exports, parseYaml(body));
@@ -205,8 +178,13 @@ const indexRoutes = async (manifest: Manifest) => {
       if ("default" in route) render = route.default as Renderer<unknown>;
       if ("handler" in route) render = route.handler as Renderer<unknown>;
       if (isPage || !manifest.routes[pathname]) {
+        const engines = getRenderers(pathname);
         route.GET = async (req: Request, ctx: Context) => {
-          const _render = async () => engine(await render(ctx), ctx);
+          const _render = async () => {
+            let page = await render(ctx);
+            for (const engine of engines) page = await engine(page, ctx);
+            return String(page);
+          };
           if (GET) return GET(req, { ...ctx, render: _render });
           const document = await _render(),
             type = ctx.state.get("contentType") ?? "text/html",
@@ -230,7 +208,55 @@ const indexRoutes = async (manifest: Manifest) => {
   }
 };
 
-const indexStatic = async () => {},
-  processStatic = async () => {};
+const indexStatic = async (manifest: Manifest) => {
+  const files = await walkDirectory(new URL("./static", manifest.baseUrl));
+  await Promise.all(files.map(async (file) => {
+    const processors = getProcessors(file.pathname);
+    for (const transform of processors) file = await transform(file);
+    if (manifest.ignorePattern?.test(file.pathname)) return;
 
-export { composeResponse, indexRoutes, useData, useMiddleware, useRenderer };
+    useMiddleware({
+      method: "GET",
+      pattern: pathToPattern(file.pathname),
+      handler: (req, ctx) => {
+        const cacheKey = `${INTERNAL_PREFIX}_cache_id`,
+          cacheId = ctx.url.searchParams.get(cacheKey),
+          cacheControl = "public, max-age=31536000, immutable",
+          headers = new Headers({
+            "content-type": file.type,
+            "vary": "If-None-Match",
+            etag: file.etag,
+          });
+        if (cacheId && cacheId !== BUILD_ID) {
+          // redirect files cached from old builds to uncached path
+          ctx.url.searchParams.delete(cacheKey);
+          return Response.redirect(ctx.url);
+          // cache requested files matching current build for a year
+        } else if (cacheId) headers.set("cache-control", cacheControl);
+        // conditional request: only send response body if cache resource has
+        // changed, tested by comparing etags (hashed from build id and pathname)
+        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-None-Match
+        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/304
+        const etagsMatch = (a: string, b: string) =>
+          a?.replace(/^W\//, "") === b?.replace(/^W\//, "");
+        return etagsMatch(file.etag, req.headers.get("if-none-match") ?? "")
+          ? new Response(null, { status: Status.NotModified, headers })
+          : new Response(file.content, { status: Status.OK, headers });
+      },
+      initialisesResponse: true,
+    });
+  }));
+};
+
+export {
+  errorResponse,
+  getData,
+  getMiddleware,
+  getProcessors,
+  indexRoutes,
+  indexStatic,
+  useData,
+  useMiddleware,
+  useProcessor,
+  useRenderer,
+};

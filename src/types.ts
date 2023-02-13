@@ -58,11 +58,6 @@ type Context = {
    */
   state: Map<string, unknown>;
   /**
-   * the matched file from the /static directory,
-   * unless responding from a registered route
-   */
-  file?: File;
-  /**
    * only available to middleware handlers,
    * for e.g. adding headers to a response
    */
@@ -75,14 +70,14 @@ type Context = {
   render?: () => ReturnType<RenderEngine["render"]>;
 } & ConnInfo;
 
-type Data = {
+interface Data {
   pattern?: URLPattern;
   /**
    * data set in _data.* files is applied to the
    * `ctx.state` of all adjacent or nested routes
    */
   [k: string]: unknown;
-};
+}
 type Route =
   & ({ default?: Renderer<unknown> } | { handler?: Renderer<unknown> })
   & {
@@ -116,26 +111,46 @@ type Middleware =
    */
   & ({ default: Handler } | { handler: Handler });
 
-type RenderEngine = {
+type ErrorHandler = Middleware & { status?: ErrorStatus };
+
+interface RenderEngine {
   /**
-   * specifies which routes/files the plugin can render/process.
-   * processors are sorted from highest to lowest specificity
-   * (e.g. `.tmpl.ts` > `.ts`) to determine the order plugins
-   * should be called in and which renderer should be used for
-   * a route. `*` matches all files but has the lowest specificity
+   * specifies which routes this engine can render.
+   * renderers are sorted from highest to lowest specificity
+   * (e.g. `.tmpl.ts` > `.ts`) to determine the order they
+   * should be called on a route in. `*` matches all routes but
+   * has the lowest specificity
    */
   target: string;
   /**
-   * called on targeted routes to transform route data. if the route is
-   * a javascript file, the renderer is passed the return value of the
-   * route's default export with the named exports set to `ctx.state`.
-   * if the route is any other file type, the renderer is passed the
-   * file's contents as a string with any frontmatter extracted and
-   * set to `ctx.state`. this must return a string of html
+   * called on targeted routes each time they are requested
+   * to transform route data. this must return a string of html.
+   *
+   * if this is the renderer with the highest priority and the
+   * route is a javascript file, the renderer is passed the return
+   * value of the route's default export with the named exports set
+   * to `ctx.state`. if the route is any other file type, the renderer
+   * is passed the file's contents as a string with any frontmatter
+   * extracted and set to `ctx.state`. all consequent renderers called
+   * will be passed the output of the previous renderer
    */
   render: (data: unknown, ctx: Context) => Promisable<string>;
-};
-type ErrorHandler = Middleware & { status?: ErrorStatus };
+}
+interface FileProcessor {
+  /**
+   * specifies which files this processor can transform.
+   * processors are sorted from highest to lowest specificity
+   * (e.g. `.next.css` > `.css`) to determine the order they
+   * should be called on a file in. `*` matches all files but
+   * has the lowest specificity
+   */
+  target: string;
+  /**
+   * called once on targeted files on server startup to
+   * preprocess file contents, types and/or pathnames
+   */
+  transform: (file: File) => Promisable<File>;
+}
 
 interface File {
   /**
@@ -168,8 +183,6 @@ interface File {
    * and plugin processing of files
    */
   content:
-    | Blob
-    | BufferSource
     | Uint8Array
     | string;
 }
@@ -180,6 +193,7 @@ export type {
   Data,
   ErrorHandler,
   File,
+  FileProcessor,
   Handler,
   HttpMethod,
   Manifest,

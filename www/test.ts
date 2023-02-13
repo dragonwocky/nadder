@@ -2,6 +2,7 @@
 // import { registerPlugin } from "../src/server/plugins.ts";
 // import plaintext from "../src/plugins/plaintext.ts";
 import type { Manifest } from "nadder/types.ts";
+import { useProcessor, useRenderer } from "../src/server/routes.ts";
 import { start } from "../src/server/listen.ts";
 
 const manifest: Manifest = {
@@ -11,6 +12,28 @@ const manifest: Manifest = {
   },
   baseUrl: new URL("./", import.meta.url),
 };
+
+import njk from "npm:nunjucks";
+import { unified } from "npm:unified";
+import remarkParse from "npm:remark-parse";
+import remarkFrontmatter from "npm:remark-frontmatter";
+import remarkGfm from "npm:remark-gfm";
+import remarkRehype from "npm:remark-rehype";
+import rehypeStringify from "npm:rehype-stringify";
+
+const md = unified()
+  .use(remarkParse)
+  .use(remarkFrontmatter)
+  .use(remarkGfm)
+  .use(remarkRehype)
+  .use(rehypeStringify);
+
+useRenderer(".njk", (page, ctx) => {
+  return njk.renderString(page, Object.fromEntries(ctx.state.entries()));
+});
+useRenderer(".njk", async (page) => {
+  return String(await md.process(<string> page));
+});
 
 start({ ...manifest });
 
@@ -22,19 +45,9 @@ start({ ...manifest });
 // start(manifest);
 
 /**
- * [x] static file serving
- * [x] static file processing
- * [x] route renderering
- * [x] route preprocessing
- * [x] route postprocessing
- * [] ignored files
  * [] layouts
  * [] components
  * [] error pages
- * [] cache busting & etags
- * [] redirects (via middleware?)
- * [x] route-level frontmatter data
- * [] shared data (via middleware?)
  * [] route factories (via middleware?)
  * [] pretty urls (/about = /about/index.html = /about.html
  *    via \/about((\.html)|(\/index\.html))?)

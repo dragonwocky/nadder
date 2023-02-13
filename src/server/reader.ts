@@ -8,9 +8,9 @@ import { walk } from "std/fs/mod.ts";
 const contentType = (path: string) => _contentType(extname(path)),
   generateEtag = async (path: string) => {
     const encoder = new TextEncoder(),
-      uintPath = encoder.encode(BUILD_ID + path),
-      hashedPath = await crypto.subtle.digest("SHA-1", uintPath);
-    return Array.from(new Uint8Array(hashedPath))
+      uintId = encoder.encode(BUILD_ID + path),
+      hashedId = await crypto.subtle.digest("SHA-1", uintId);
+    return Array.from(new Uint8Array(hashedId))
       .map((byte) => byte.toString(16).padStart(2, "0"))
       .join("");
   };
