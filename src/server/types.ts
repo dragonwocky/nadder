@@ -111,9 +111,12 @@ type Middleware =
    */
   & ({ default: Handler } | { handler: Handler });
 
-type ErrorHandler = Middleware & { status?: ErrorStatus };
-
 interface RenderEngine {
+  /**
+   * engine name, used to manually select an engine or queue
+   * multiple engines via the `renderEngines` key of `ctx.state`
+   */
+  id: string;
   /**
    * specifies which routes this engine can render.
    * renderers are sorted from highest to lowest specificity
@@ -121,7 +124,7 @@ interface RenderEngine {
    * should be called on a route in. `*` matches all routes but
    * has the lowest specificity
    */
-  target: string;
+  targets: string[];
   /**
    * called on targeted routes each time they are requested
    * to transform route data. this must return a string of html.
@@ -144,13 +147,20 @@ interface FileProcessor {
    * should be called on a file in. `*` matches all files but
    * has the lowest specificity
    */
-  target: string;
+  targets: string[];
   /**
    * called once on targeted files on server startup to
    * preprocess file contents, types and/or pathnames
    */
   transform: (file: File) => Promisable<File>;
 }
+/**
+ * the default http error pages can be overriden by
+ * error page handlers exported from _status.* files.
+ * note: in the case of a http 500 error, the error will
+ * be accessible via `ctx.state.get("error")`
+ */
+type ErrorHandler = Route & { status?: ErrorStatus };
 
 interface File {
   /**

@@ -15,126 +15,46 @@ import type {
   Context,
   Data,
   ErrorHandler,
-  FileProcessor,
   Handler,
   HttpMethod,
   Manifest,
   Middleware,
-  RenderEngine,
   Renderer,
   Route,
-} from "../types.ts";
-import { HttpMethods } from "../types.ts";
+} from "./types.ts";
+import { HttpMethods } from "./types.ts";
 import { walkDirectory } from "./reader.ts";
 import { BUILD_ID, INTERNAL_PREFIX } from "../constants.ts";
 
+import {
+  getErrorHandler,
+  getProcessorsByExtension,
+  getRendererById,
+  getRenderersByExtension,
+  useData,
+  useErrorHandler,
+  useMiddleware,
+} from "./hooks.ts";
+
 const pathToPattern = (path: string): URLPattern => {
-    // if (ignoreExtension) path = path.slice(0, -extname(path).length);
-    return new URLPattern({
-      pathname: path.split("/")
-        .map((part) => {
-          if (part.endsWith("]")) {
-            // repeated group e.g. /[...path] matches /path/to/file/
-            if (part.startsWith("[...")) return `:${part.slice(4, -1)}*`;
-            // named group e.g. /user/[id] matches /user/6448
-            if (part.startsWith("[")) `:${part.slice(1, -1)}`;
-          }
-          return part;
-        }).join("/")
-        // /route/index is equiv to -> /route
-        .replace(/\/index$/, "")
-        // /*? matches all nested routes
-        .replace(/\/_(middleware|data)$/, "/*?")
-        // ensure starting slash and remove repeat slashes
-        .replace(/(^\/*|\/+)/g, "/"),
-    });
-  },
-  sortByPattern = <T extends { pattern?: URLPattern }[]>(handlers: T) => {
-    // sort by specifity: outer scope executes first
-    // e.g. /admin/signin -> routes/_middleware
-    // ctx.next() -> routes/admin/_middleware
-    // ctx.next() -> routes/admin/signin
-    const getPriority = (part: string) =>
-      part.startsWith(":") ? part.endsWith("*") ? 0 : 1 : 2;
-    return handlers.sort((a, b) => {
-      const partsA = a.pattern?.pathname.split("/") ?? [],
-        partsB = b.pattern?.pathname.split("/") ?? [];
-      for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-        if (partsA[i] === partsB[i]) continue;
-        if (partsA[i] === undefined) return -1;
-        if (partsB[i] === undefined) return 1;
-        return getPriority(partsA[i]) - getPriority(partsB[i]);
-      }
-      return 0;
-    });
-  };
-
-const _data: Data[] = [],
-  _middleware: Middleware[] = [],
-  _renderEngines: RenderEngine[] = [],
-  _fileProcessors: FileProcessor[] = [];
-// _errorHandlers: ErrorHandler[] = [];
-
-const useData = (data: Data) => {
-    data.pattern ??= new URLPattern({ pathname: "/*?" });
-    if (Object.keys(data).length < 2) return;
-    _data.push(data);
-    sortByPattern<Data[]>(_data);
-  },
-  useMiddleware = (middleware: Middleware) => {
-    if (!("default" in middleware || "handler" in middleware)) return;
-    _middleware.push({
-      method: "*",
-      pattern: new URLPattern({ pathname: "/*?" }),
-      ...middleware,
-    });
-    sortByPattern<Middleware[]>(_middleware);
-  },
-  useRenderer = (
-    target: RenderEngine["target"],
-    render: RenderEngine["render"],
-  ) => {
-    _renderEngines.push({ target, render });
-    _renderEngines.sort((a, b) => a.target.localeCompare(b.target));
-  },
-  useProcessor = (
-    target: FileProcessor["target"],
-    transform: FileProcessor["transform"],
-  ) => {
-    _fileProcessors.push({ target, transform });
-    _fileProcessors.sort((a, b) => a.target.localeCompare(b.target));
-  };
-// registerErrorHandler = (errorHandler: ErrorHandler) => {
-//   // innermost error handler takes priority
-//   sortByPattern<ErrorHandler[]>([errorHandler, ..._errorHandlers]).reverse();
-// };
-
-// const getErrorHandler = (errorCode: ErrorStatus, req: Request) => {
-//   const url = new URL(req.url);
-//   return _errorHandlers.find(({ status, pattern }) => {
-//     return status === errorCode && pattern!.exec(url);
-//   });
-// };
-
-const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
-  getMiddleware = (url: URL) => {
-    return _middleware.filter((mw) => mw.pattern!.exec(url));
-  },
-  getRenderers = (pathname: string): RenderEngine["render"][] => {
-    return _renderEngines
-      .filter((engine) => pathname.endsWith(engine.target))
-      .map((engine) => engine.render);
-  },
-  getProcessors = (pathname: string): FileProcessor["transform"][] => {
-    return _fileProcessors
-      .filter((processor) => pathname.endsWith(processor.target))
-      .map((processor) => processor.transform);
-  };
-
-const errorResponse = (status: ErrorStatus) => {
-  return new Response(`${status} ${STATUS_TEXT[status]}`, {
-    status,
-    statusText: STATUS_TEXT[status],
+  // if (ignoreExtension) path = path.slice(0, -extname(path).length);
+  return new URLPattern({
+    pathname: path.split("/")
+      .map((part) => {
+        if (part.endsWith("]")) {
+          // repeated group e.g. /[...path] matches /path/to/file/
+          if (part.startsWith("[...")) return `:${part.slice(4, -1)}*`;
+          // named group e.g. /user/[id] matches /user/6448
+          if (part.startsWith("[")) `:${part.slice(1, -1)}`;
+        }
+        return part;
+      }).join("/")
+      // /route/index is equiv to -> /route
+      .replace(/\/index$/, "")
+      // /*? matches all nested routes
+      .replace(/\/_(middleware|data)$/, "/*?")
+      // ensure starting slash and remove repeat slashes
+      .replace(/(^\/*|\/+)/g, "/"),
   });
 };
 
@@ -168,8 +88,10 @@ const indexRoutes = async (manifest: Manifest) => {
     if (isMiddleware) useMiddleware(exports as Middleware);
     else if (isData) useData(exports);
     else if (isErrorHandler) {
-      //   (exports as ErrorHandler).status = +status;
-      //   registerErrorHandler(exports as ErrorHandler);
+      useErrorHandler({
+        ...(exports as ErrorHandler),
+        status: +status,
+      });
     } else {
       const data: Data = {},
         { GET, ...route } = exports as Route,
@@ -178,15 +100,18 @@ const indexRoutes = async (manifest: Manifest) => {
       if ("default" in route) render = route.default as Renderer<unknown>;
       if ("handler" in route) render = route.handler as Renderer<unknown>;
       if (isPage || !manifest.routes[pathname]) {
-        const engines = getRenderers(pathname);
         route.GET = async (req: Request, ctx: Context) => {
-          const _render = async () => {
+          const engines = ctx.state.has("renderEngines")
+            ? (ctx.state.get("renderEngines") as string[]).map(getRendererById)
+              .filter((engine) => engine)
+            : getRenderersByExtension(pathname);
+          ctx.render = async () => {
             let page = await render(ctx);
-            for (const engine of engines) page = await engine(page, ctx);
+            for (const engine of engines) page = await engine!(page, ctx);
             return String(page);
           };
-          if (GET) return GET(req, { ...ctx, render: _render });
-          const document = await _render(),
+          if (GET) return GET(req, ctx);
+          const document = await ctx.render(),
             type = ctx.state.get("contentType") ?? "text/html",
             headers = new Headers({ "content-type": String(type) });
           return new Response(document, { status: Status.OK, headers });
@@ -211,7 +136,7 @@ const indexRoutes = async (manifest: Manifest) => {
 const indexStatic = async (manifest: Manifest) => {
   const files = await walkDirectory(new URL("./static", manifest.baseUrl));
   await Promise.all(files.map(async (file) => {
-    const processors = getProcessors(file.pathname);
+    const processors = getProcessorsByExtension(file.pathname);
     for (const transform of processors) file = await transform(file);
     if (manifest.ignorePattern?.test(file.pathname)) return;
 
@@ -248,15 +173,4 @@ const indexStatic = async (manifest: Manifest) => {
   }));
 };
 
-export {
-  errorResponse,
-  getData,
-  getMiddleware,
-  getProcessors,
-  indexRoutes,
-  indexStatic,
-  useData,
-  useMiddleware,
-  useProcessor,
-  useRenderer,
-};
+export { indexRoutes, indexStatic };

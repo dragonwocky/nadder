@@ -1,9 +1,9 @@
 // import { start } from "../src/server/listen.ts";
 // import { registerPlugin } from "../src/server/plugins.ts";
 // import plaintext from "../src/plugins/plaintext.ts";
-import type { Manifest } from "nadder/types.ts";
-import { useProcessor, useRenderer } from "../src/server/routes.ts";
-import { start } from "../src/server/listen.ts";
+import type { Manifest } from "../src/server/types.ts";
+import { useProcessor, useRenderer } from "../src/server/hooks.ts";
+import { start } from "../src/server.ts";
 
 const manifest: Manifest = {
   routes: {
