@@ -1,4 +1,4 @@
-import { Handler } from "nadder/types.ts";
+import { type Handler } from "nadder/server.ts";
 
 export default (async (_, ctx) => {
   const res = await ctx.next!();

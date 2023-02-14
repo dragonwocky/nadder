@@ -8,26 +8,10 @@ import {
   type ErrorStatus,
   isErrorStatus,
   Status,
-  STATUS_TEXT,
 } from "std/http/http_status.ts";
 import { extname } from "std/path/mod.ts";
-import type {
-  Context,
-  Data,
-  ErrorHandler,
-  Handler,
-  HttpMethod,
-  Manifest,
-  Middleware,
-  Renderer,
-  Route,
-} from "./types.ts";
-import { HttpMethods } from "./types.ts";
-import { walkDirectory } from "./reader.ts";
 import { BUILD_ID, INTERNAL_PREFIX } from "../constants.ts";
-
 import {
-  getErrorHandler,
   getProcessorsByExtension,
   getRendererById,
   getRenderersByExtension,
@@ -35,28 +19,58 @@ import {
   useErrorHandler,
   useMiddleware,
 } from "./hooks.ts";
+import { walkDirectory } from "./reader.ts";
+import {
+  type Context,
+  type Data,
+  type ErrorHandler,
+  type Handler,
+  type HttpMethod,
+  HttpMethods,
+  type Manifest,
+  type Middleware,
+  type Renderer,
+  type Route,
+} from "./types.ts";
 
 const pathToPattern = (path: string): URLPattern => {
-  // if (ignoreExtension) path = path.slice(0, -extname(path).length);
-  return new URLPattern({
-    pathname: path.split("/")
-      .map((part) => {
-        if (part.endsWith("]")) {
-          // repeated group e.g. /[...path] matches /path/to/file/
-          if (part.startsWith("[...")) return `:${part.slice(4, -1)}*`;
-          // named group e.g. /user/[id] matches /user/6448
-          if (part.startsWith("[")) `:${part.slice(1, -1)}`;
-        }
-        return part;
-      }).join("/")
-      // /route/index is equiv to -> /route
-      .replace(/\/index$/, "")
-      // /*? matches all nested routes
-      .replace(/\/_(middleware|data)$/, "/*?")
-      // ensure starting slash and remove repeat slashes
-      .replace(/(^\/*|\/+)/g, "/"),
-  });
-};
+    // if (ignoreExtension) path = path.slice(0, -extname(path).length);
+    return new URLPattern({
+      pathname: path.split("/")
+        .map((part) => {
+          if (part.endsWith("]")) {
+            // repeated group e.g. /[...path] matches /path/to/file/
+            if (part.startsWith("[...")) return `:${part.slice(4, -1)}*`;
+            // named group e.g. /user/[id] matches /user/6448
+            if (part.startsWith("[")) `:${part.slice(1, -1)}`;
+          }
+          return part;
+        }).join("/")
+        // /route/index is equiv to -> /route
+        .replace(/\/index$/, "")
+        // /*? matches all nested routes
+        .replace(/\/_(middleware|data)$/, "/*?")
+        // ensure starting slash and remove repeat slashes
+        .replace(/(^\/*|\/+)/g, "/"),
+    });
+  },
+  renderPage = async (
+    ctx: Context,
+    route: Route,
+    pathname: string,
+    body: string,
+  ) => {
+    let render;
+    if ("default" in route) render = route.default as Renderer<unknown>;
+    else if ("handler" in route) render = route.handler as Renderer<unknown>;
+    let page = (await render?.(ctx)) ?? body;
+    const engines = ctx.state.has("renderEngines")
+      ? (ctx.state.get("renderEngines") as string[]).map(getRendererById)
+        .filter((engine) => engine)
+      : getRenderersByExtension(pathname);
+    for (const engine of engines) page = await engine!(page, ctx);
+    return String(page);
+  };
 
 const indexRoutes = async (manifest: Manifest) => {
   const decoder = new TextDecoder("utf-8"),
@@ -66,7 +80,7 @@ const indexRoutes = async (manifest: Manifest) => {
     const [, status] = pathname.match(/\/_(\d+)+\.[^/]+$/) ?? [],
       isData = /\/_data\.[^/]+$/.test(pathname),
       isMiddleware = /\/_middleware\.[^/]+$/.test(pathname),
-      isErrorHandler = isErrorStatus(+status?.[1]);
+      isErrorHandler = isErrorStatus(+status);
     if (!(isData || isMiddleware || isErrorHandler)) {
       if (manifest.ignorePattern?.test(pathname)) continue;
     }
@@ -88,30 +102,28 @@ const indexRoutes = async (manifest: Manifest) => {
     if (isMiddleware) useMiddleware(exports as Middleware);
     else if (isData) useData(exports);
     else if (isErrorHandler) {
-      useErrorHandler({
-        ...(exports as ErrorHandler),
-        status: +status,
-      });
+      const data: Data = {},
+        errorHandler = exports as ErrorHandler;
+      for (const key in errorHandler) {
+        if (["default", "handler"].includes(key)) continue;
+        data[key] = errorHandler[key];
+      }
+      errorHandler.status = +status as ErrorStatus;
+      const render = (ctx: Context) => {
+        for (const key in data) ctx.state.set(key, data[key]);
+        return renderPage(ctx, errorHandler, pathname, body);
+      };
+      useErrorHandler({ ...errorHandler, render });
     } else {
       const data: Data = {},
         { GET, ...route } = exports as Route,
-        isPage = GET || "default" in route || "handler" in route;
-      let render: Renderer<unknown> = () => body;
-      if ("default" in route) render = route.default as Renderer<unknown>;
-      if ("handler" in route) render = route.handler as Renderer<unknown>;
-      if (isPage || !manifest.routes[pathname]) {
+        requiresRenderer = !manifest.routes[pathname],
+        hasHandler = GET || "default" in route || "handler" in route;
+      if (hasHandler || requiresRenderer) {
         route.GET = async (req: Request, ctx: Context) => {
-          const engines = ctx.state.has("renderEngines")
-            ? (ctx.state.get("renderEngines") as string[]).map(getRendererById)
-              .filter((engine) => engine)
-            : getRenderersByExtension(pathname);
-          ctx.render = async () => {
-            let page = await render(ctx);
-            for (const engine of engines) page = await engine!(page, ctx);
-            return String(page);
-          };
+          ctx.render = () => renderPage(ctx, route, pathname, body);
           if (GET) return GET(req, ctx);
-          const document = await ctx.render(),
+          const document = await ctx.render?.(),
             type = ctx.state.get("contentType") ?? "text/html",
             headers = new Headers({ "content-type": String(type) });
           return new Response(document, { status: Status.OK, headers });

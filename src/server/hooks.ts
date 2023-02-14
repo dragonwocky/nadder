@@ -1,10 +1,11 @@
-import type { ErrorStatus } from "std/http/mod.ts";
+import { type ErrorStatus, isErrorStatus } from "std/http/mod.ts";
 import type {
   Data,
   ErrorHandler,
   FileProcessor,
   Middleware,
   RenderEngine,
+  Renderer,
 } from "./types.ts";
 
 const sortByPattern = <T extends { pattern?: URLPattern }[]>(handlers: T) => {
@@ -29,19 +30,20 @@ const sortByPattern = <T extends { pattern?: URLPattern }[]>(handlers: T) => {
 
 type _FileProcessor = { target: string; transform: FileProcessor["transform"] };
 type _RenderEngine = { target: string; render: RenderEngine["render"] };
+type _ErrorHandler = ErrorHandler & { render: Renderer<string> };
 const _data: Data[] = [],
-  _errorHandlers: ErrorHandler[] = [],
+  _errorHandlers: _ErrorHandler[] = [],
   _middleware: Middleware[] = [],
   _fileProcessors: _FileProcessor[] = [],
-  _namedRenderEngines: Map<string, RenderEngine["render"]> = new Map(),
-  _sortedRenderEngines: _RenderEngine[] = [];
+  _renderEnginesById: Map<string, RenderEngine["render"]> = new Map(),
+  _renderEnginesByExtension: _RenderEngine[] = [];
 
 const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
-  getErrorHandler = (errorCode: ErrorStatus, req: Request) => {
+  getErrorHandler = (status: ErrorStatus, req: Request) => {
     const url = new URL(req.url);
-    return _errorHandlers.find(({ status, pattern }) => {
-      return status === errorCode && pattern!.exec(url);
-    });
+    return _errorHandlers.find((handler) => {
+      return handler.status === status && handler.pattern!.exec(url);
+    })?.render;
   },
   getMiddleware = (url: URL) => {
     return _middleware.filter((mw) => mw.pattern!.exec(url));
@@ -51,9 +53,9 @@ const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
       .filter((processor) => pathname.endsWith(processor.target))
       .map((processor) => processor.transform);
   },
-  getRendererById = (id: RenderEngine["id"]) => _namedRenderEngines.get(id),
+  getRendererById = (id: RenderEngine["id"]) => _renderEnginesById.get(id),
   getRenderersByExtension = (pathname: string): RenderEngine["render"][] => {
-    return _sortedRenderEngines
+    return _renderEnginesByExtension
       .filter((engine) => pathname.endsWith(engine.target))
       .map((engine) => engine.render);
   };
@@ -64,7 +66,9 @@ const useData = (data: Data) => {
     _data.push(data);
     sortByPattern<Data[]>(_data);
   },
-  useErrorHandler = (errorHandler: ErrorHandler) => {
+  useErrorHandler = (errorHandler: _ErrorHandler) => {
+    if (!isErrorStatus(errorHandler.status!)) return;
+    if (!("default" in errorHandler || "handler" in errorHandler)) return;
     _errorHandlers.push(errorHandler);
     // innermost error handler takes priority ∴ reverse
     sortByPattern<ErrorHandler[]>(_errorHandlers).reverse();
@@ -83,10 +87,12 @@ const useData = (data: Data) => {
     _fileProcessors.sort((a, b) => a.target.localeCompare(b.target));
   },
   useRenderer = ({ id, targets, render }: RenderEngine) => {
-    _namedRenderEngines.set(id, render);
+    _renderEnginesById.set(id, render);
     // split up targets to create sorted list of extension-associated engines
-    for (const target of targets) _sortedRenderEngines.push({ target, render });
-    _sortedRenderEngines.sort((a, b) => a.target.localeCompare(b.target));
+    for (const target of targets) {
+      _renderEnginesByExtension.push({ target, render });
+    }
+    _renderEnginesByExtension.sort((a, b) => a.target.localeCompare(b.target));
   };
 
 export {

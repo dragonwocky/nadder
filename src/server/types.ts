@@ -1,5 +1,5 @@
-import type { ConnInfo } from "std/http/mod.ts";
 import type { ErrorStatus } from "std/http/http_status.ts";
+import type { ConnInfo } from "std/http/mod.ts";
 
 const HttpMethods = [
   "*",
@@ -68,6 +68,14 @@ type Context = {
    * the route rendered to a string of html
    */
   render?: () => ReturnType<RenderEngine["render"]>;
+  /**
+   * creates a http response from any available _status.*
+   * error handler pages, otherwise returns a plaintext
+   * error status message
+   */
+  renderNotFound: () => Promisable<Response>;
+  renderBadRequest: () => Promisable<Response>;
+  renderUnauthorized: () => Promisable<Response>;
 } & ConnInfo;
 
 interface Data {
@@ -137,7 +145,7 @@ interface RenderEngine {
    * extracted and set to `ctx.state`. all consequent renderers called
    * will be passed the output of the previous renderer
    */
-  render: (data: unknown, ctx: Context) => Promisable<string>;
+  render: (page: unknown, ctx: Context) => Promisable<string>;
 }
 interface FileProcessor {
   /**
@@ -160,7 +168,9 @@ interface FileProcessor {
  * note: in the case of a http 500 error, the error will
  * be accessible via `ctx.state.get("error")`
  */
-type ErrorHandler = Route & { status?: ErrorStatus };
+type ErrorHandler =
+  & { pattern?: URLPattern; status?: ErrorStatus; [k: string]: unknown }
+  & ({ default: Handler } | { handler: Handler });
 
 interface File {
   /**

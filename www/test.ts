@@ -2,8 +2,7 @@
 // import { registerPlugin } from "../src/server/plugins.ts";
 // import plaintext from "../src/plugins/plaintext.ts";
 import type { Manifest } from "../src/server/types.ts";
-import { useProcessor, useRenderer } from "../src/server/hooks.ts";
-import { start } from "../src/server.ts";
+import { start, useRenderer } from "../src/server.ts";
 
 const manifest: Manifest = {
   routes: {
@@ -28,11 +27,17 @@ const md = unified()
   .use(remarkRehype)
   .use(rehypeStringify);
 
-useRenderer(".njk", (page, ctx) => {
-  return njk.renderString(page, Object.fromEntries(ctx.state.entries()));
+useRenderer({
+  id: "njk",
+  targets: [".njk"],
+  render: (page, ctx) => {
+    return njk.renderString(page, Object.fromEntries(ctx.state.entries()));
+  },
 });
-useRenderer(".njk", async (page) => {
-  return String(await md.process(<string> page));
+useRenderer({
+  id: "md",
+  targets: [".md"],
+  render: async (page) => String(await md.process(<string> page)),
 });
 
 start({ ...manifest });
