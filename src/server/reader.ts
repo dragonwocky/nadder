@@ -13,12 +13,12 @@ const catchErrors = async (handler: CallableFunction) => {
 };
 
 const _cache: Map<string, Readonly<Omit<File, "location">>> = new Map(),
-  readFile = async (location: URL, baseUrl: URL): Promise<File> => {
+  readFile = async (location: URL, pathnameTrim: number): Promise<File> => {
     // files are cached to reduce repeated file reads
     if (!_cache.has(location.href)) {
       const uid = new TextEncoder().encode(BUILD_ID + location.href);
       _cache.set(location.href, {
-        pathname: location.pathname.slice(baseUrl.pathname.length),
+        pathname: location.pathname.slice(pathnameTrim),
         type: contentType(extname(location.href)) ?? "application/octet-stream",
         size: (await Deno.stat(location)).size,
         content: await Deno.readFile(location),
@@ -40,7 +40,7 @@ const _cache: Map<string, Readonly<Omit<File, "location">>> = new Map(),
         });
       for await (const { path } of entries) {
         files.push(catchErrors(async () => {
-          return await readFile(toFileUrl(path), location);
+          return await readFile(toFileUrl(path), location.pathname.length);
         }));
       }
       return Promise.all(files);

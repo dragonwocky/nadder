@@ -28,10 +28,10 @@ interface Manifest {
     | ErrorHandler
   >;
   /**
-   * the project root to serve from, defaulting to the result of
-   * `new URL("./", import.meta.url)` of the manifest.gen.ts
+   * the project root to import and serve routes and static files from,
+   * defaulting to the `import.meta.url` of the manifest.gen.ts file
    */
-  baseUrl: URL;
+  importRoot: string;
   /**
    * a pattern tested against file paths loaded from the /routes
    * and /static directories to filter out certain files & folders

@@ -74,7 +74,7 @@ const pathToPattern = (path: string): URLPattern => {
 
 const indexRoutes = async (manifest: Manifest) => {
   const decoder = new TextDecoder("utf-8"),
-    files = await walkDirectory(new URL("./routes", manifest.baseUrl));
+    files = await walkDirectory(new URL("./routes", manifest.importRoot));
 
   for (const { content, pathname } of files) {
     const [, status] = pathname.match(/\/_(\d+)+\.[^/]+$/) ?? [],
@@ -146,7 +146,7 @@ const indexRoutes = async (manifest: Manifest) => {
 };
 
 const indexStatic = async (manifest: Manifest) => {
-  const files = await walkDirectory(new URL("./static", manifest.baseUrl));
+  const files = await walkDirectory(new URL("./static", manifest.importRoot));
   await Promise.all(files.map(async (file) => {
     const processors = getProcessorsByExtension(file.pathname);
     for (const transform of processors) file = await transform(file);
