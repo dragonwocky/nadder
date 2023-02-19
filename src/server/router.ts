@@ -12,11 +12,14 @@ import {
 import { extname } from "std/path/mod.ts";
 import { BUILD_ID, INTERNAL_PREFIX } from "../constants.ts";
 import {
-  getProcessorsByExtension,
-  getRendererByName,
+  getLayout,
+  getLayoutData,
+  getProcessors,
+  getRenderer,
   getRenderersByExtension,
   useData,
   useErrorHandler,
+  useLayout,
   useMiddleware,
 } from "./hooks.ts";
 import { walkDirectory } from "./reader.ts";
@@ -54,23 +57,49 @@ const pathToPattern = (path: string): URLPattern => {
         .replace(/(^\/*|\/+)/g, "/"),
     });
   },
-  renderPage = async (
-    ctx: Context,
-    route: Route,
-    pathname: string,
-    body: string,
-  ) => {
-    let render;
-    if ("default" in route) render = route.default as _RenderFunction;
-    else if ("handler" in route) render = route.handler as _RenderFunction;
-    let page = (await render?.(ctx)) ?? body;
-    const engines = ctx.state.has("renderEngines")
-      ? (ctx.state.get("renderEngines") as string[]).map(getRendererByName)
-        .filter((engine) => engine)
-      : getRenderersByExtension(pathname);
-    for (const engine of engines) page = await engine!(page, ctx);
-    return String(page);
+  _renderHtml = async (ctx: Context, render: _RenderFunction) => {
+    let content = await render?.(ctx) ?? "";
+    const engines = (ctx.state.get("renderEngines") as string[] ?? [])
+      .map(getRenderer).filter((engine) => engine);
+    for (const engine of engines) content = await engine!(content, ctx);
+    const layout = getLayout(ctx.state.get("layout") as string);
+    if (layout) {
+      ctx.state.set("content", content);
+      ctx.state.set("layout", layout.layout);
+      ctx.state.set("renderEngines", layout.renderEngines);
+      content = await _renderHtml(ctx, layout.default);
+    }
+    return String(content);
+  },
+  renderHtml = (ctx: Context, render: _RenderFunction) => {
+    // assign layout data only at start of render chain
+    const layoutName = ctx.state.get("layout") as string,
+      layoutData = getLayoutData(layoutName);
+    for (const key in layoutData) {
+      // route-specific data has priority over layout data
+      if (!ctx.state.has(key)) ctx.state.set(key, layoutData[key]);
+    }
+    return _renderHtml(ctx, render);
   };
+
+const indexLayouts = async (manifest: Manifest) => {
+  const decoder = new TextDecoder("utf-8"),
+    dir = new URL("./routes/_layouts", manifest.importRoot),
+    files = await walkDirectory(dir);
+  for (const { content, pathname } of files) {
+    const layout = { ...(manifest.layouts[pathname] ?? {}) };
+    let body = decoder.decode(content as Uint8Array);
+    if (hasFrontmatter(body)) {
+      const { body: _body, attrs } = extractFrontmatter(body);
+      Object.assign(layout, attrs);
+      body = _body;
+    }
+    layout.name ??= pathname.slice(1);
+    layout.default ??= () => body;
+    layout.renderEngines ??= getRenderersByExtension(pathname);
+    useLayout(layout);
+  }
+};
 
 const indexRoutes = async (manifest: Manifest) => {
   const decoder = new TextDecoder("utf-8"),
@@ -83,6 +112,7 @@ const indexRoutes = async (manifest: Manifest) => {
       isErrorHandler = isErrorStatus(+status);
     if (!(isData || isMiddleware || isErrorHandler)) {
       if (manifest.ignorePattern?.test(pathname)) continue;
+      if (/^\/_(layouts|components)\//.test(pathname)) continue;
     }
 
     const ext = extname(pathname),
@@ -101,46 +131,53 @@ const indexRoutes = async (manifest: Manifest) => {
 
     if (isMiddleware) useMiddleware(exports as Middleware);
     else if (isData) useData(exports);
-    else if (isErrorHandler) {
-      const data: Data = {},
-        errorHandler = exports as ErrorHandler;
-      for (const key in errorHandler) {
-        if (["default", "handler"].includes(key)) continue;
-        data[key] = errorHandler[key];
+    else {
+      const data: Data = {};
+      for (const key in exports) {
+        if (["default", "handler", ...HttpMethods].includes(key)) continue;
+        data[key] = exports[key as keyof typeof exports];
       }
-      errorHandler.status = +status as ErrorStatus;
-      const render = (ctx: Context) => {
-        for (const key in data) ctx.state.set(key, data[key]);
-        return renderPage(ctx, errorHandler, pathname, body);
-      };
-      useErrorHandler({ ...errorHandler, render });
-    } else {
-      const data: Data = {},
-        { GET, ...route } = exports as Route,
-        requiresRenderer = !manifest.routes[pathname],
-        hasHandler = GET || "default" in route || "handler" in route;
-      if (hasHandler || requiresRenderer) {
-        route.GET = async (req: Request, ctx: Context) => {
-          ctx.render = () => renderPage(ctx, route, pathname, body);
-          if (GET) return GET(req, ctx);
-          const document = await ctx.render?.(),
-            type = ctx.state.get("contentType") ?? "text/html",
-            headers = new Headers({ "content-type": String(type) });
-          return new Response(document, { status: Status.OK, headers });
-        };
-      }
-      for (const key in route) {
-        if (["default", "handler"].includes(key)) continue;
-        if (HttpMethods.includes(key as HttpMethod)) {
+      data.renderEngines ??= getRenderersByExtension(pathname);
+      if (isErrorHandler) {
+        const errorHandler = exports as ErrorHandler;
+        if (!manifest.routes[pathname]) errorHandler.default ??= () => body;
+        errorHandler.handler ??= errorHandler.default;
+        errorHandler.status = +status as ErrorStatus;
+        useErrorHandler({
+          ...errorHandler,
+          render: (ctx: Context) => {
+            for (const key in data) ctx.state.set(key, data[key]);
+            return renderHtml(ctx, errorHandler.handler as _RenderFunction);
+          },
+        });
+      } else {
+        const route = exports as Route;
+        if (!manifest.routes[pathname]) route.default ??= () => body;
+        route.handler ??= route.default;
+        if (route.GET || route.handler) {
+          const GET = route.GET;
+          route.GET = async (req: Request, ctx: Context) => {
+            ctx.render = () => {
+              return renderHtml(ctx, route.handler as _RenderFunction);
+            };
+            if (GET) return GET(req, ctx);
+            const document = await ctx.render(),
+              type = ctx.state.get("contentType") ?? "text/html",
+              headers = new Headers({ "content-type": String(type) });
+            return new Response(document, { status: Status.OK, headers });
+          };
+        }
+        for (const key of HttpMethods) {
+          if (!route[key]) continue;
           useMiddleware({
             method: key as HttpMethod,
             pattern: route.pattern,
             handler: route[key] as Handler,
             initialisesResponse: true,
           });
-        } else data[key] = route[key];
+        }
+        useData(data);
       }
-      useData(data);
     }
   }
 };
@@ -148,7 +185,7 @@ const indexRoutes = async (manifest: Manifest) => {
 const indexStatic = async (manifest: Manifest) => {
   const files = await walkDirectory(new URL("./static", manifest.importRoot));
   await Promise.all(files.map(async (file) => {
-    const processors = getProcessorsByExtension(file.pathname);
+    const processors = getProcessors(file.pathname);
     for (const transform of processors) file = await transform(file);
     if (manifest.ignorePattern?.test(file.pathname)) return;
 
@@ -185,4 +222,4 @@ const indexStatic = async (manifest: Manifest) => {
   }));
 };
 
-export { indexRoutes, indexStatic };
+export { indexLayouts, indexRoutes, indexStatic };

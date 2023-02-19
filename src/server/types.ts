@@ -189,7 +189,7 @@ interface Layout {
    * layout name, defaults to the pathname relative to
    * the `routes/_layouts` directory e.g. `post.njk`
    */
-  name: string;
+  name?: string;
   /**
    * if a page is rendered with the `layout` key of `ctx.state` set,
    * the matching layout will be rendered and served with the rendered
@@ -198,8 +198,12 @@ interface Layout {
   default: _RenderFunction;
   /**
    * data to apply to `ctx.state` on render of any route
-   * that uses this layout (accessible to route, may be
-   * overridden by route's own `ctx.state`)
+   * that uses this layout. this data is not accessible to
+   * middleware pre-render and will be overridden by keys
+   * of the same name that are set directly on the rendered
+   * route. the special `renderEngines` and `layout` state
+   * keys can be set on a layout but will not be set to
+   * `ctx.state` until the layout itself begins rendering
    */
   [k: string]: unknown;
 }
@@ -208,7 +212,7 @@ interface Component {
    * component name, defaults to the pathname relative to
    * the `routes/_components` directory e.g. `button.tsx`
    */
-  name: string;
+  name?: string;
   /**
    * TODO(dragonwocky)
    */

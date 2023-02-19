@@ -7,7 +7,7 @@ import {
   STATUS_TEXT,
 } from "std/http/mod.ts";
 import { getData, getErrorHandler, getMiddleware } from "./server/hooks.ts";
-import { indexRoutes, indexStatic } from "./server/router.ts";
+import { indexLayouts, indexRoutes, indexStatic } from "./server/router.ts";
 import type {
   Context,
   HttpMethod,
@@ -21,7 +21,11 @@ const start = async (manifest: Manifest, serveInit: ServeInit = {}) => {
     console.log(`Server listening on http://${hostname}:${port}/`);
   });
 
-  await Promise.all([indexRoutes(manifest), indexStatic(manifest)]);
+  await Promise.all([
+    indexLayouts(manifest),
+    indexRoutes(manifest),
+    indexStatic(manifest),
+  ]);
   return serve(async (req: Request, connInfo: ConnInfo) => {
     let middleware: Middleware[];
     const ctx: Context = {

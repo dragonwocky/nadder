@@ -3,6 +3,7 @@ import type {
   _RenderFunction,
   Data,
   ErrorHandler,
+  Layout,
   Middleware,
   Processor,
   Renderer,
@@ -32,13 +33,14 @@ const sortByPattern = <T extends _PatternSortable[]>(handlers: T) => {
 };
 
 type _Processor = { target: string; transform: Processor["transform"] };
-type _Renderer = { target: string; render: Renderer["render"] };
+type _Renderer = { target: string; name: Renderer["name"] };
 type _ErrorHandler = ErrorHandler & { render: _RenderFunction<string> };
 const _data: Data[] = [],
   _errorHandlers: _ErrorHandler[] = [],
+  _layouts: Map<Layout["name"], Layout> = new Map(),
   _middleware: Middleware[] = [],
   _processors: _Processor[] = [],
-  _renderersByName: Map<string, Renderer["render"]> = new Map(),
+  _renderers: Map<Renderer["name"], Renderer["render"]> = new Map(),
   _renderersByExtension: _Renderer[] = [];
 
 const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
@@ -48,19 +50,32 @@ const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
       return handler.status === status && handler.pattern!.exec(url);
     })?.render;
   },
+  getLayout = (name: Layout["name"]) => _layouts.get(name),
+  getLayoutData = (name: Layout["name"]) => {
+    let data: Data = { layout: name };
+    while (data.layout) {
+      const layout = data.layout as string;
+      delete data.layout;
+      data = { ..._layouts.get(layout), ...data };
+    }
+    delete data.name;
+    delete data.default;
+    delete data.renderEngines;
+    return data;
+  },
   getMiddleware = (url: URL) => {
     return _middleware.filter((mw) => mw.pattern!.exec(url));
   },
-  getProcessorsByExtension = (pathname: string) => {
+  getProcessors = (pathname: string) => {
     return _processors
       .filter((processor) => pathname.endsWith(processor.target))
       .map((processor) => processor.transform);
   },
-  getRendererByName = (name: Renderer["name"]) => _renderersByName.get(name),
-  getRenderersByExtension = (pathname: string): Renderer["render"][] => {
+  getRenderer = (name: Renderer["name"]) => _renderers.get(name),
+  getRenderersByExtension = (pathname: string): Renderer["name"][] => {
     return _renderersByExtension
       .filter((engine) => pathname.endsWith(engine.target))
-      .map((engine) => engine.render);
+      .map((engine) => engine.name);
   };
 
 const useData = (data: Data) => {
@@ -76,6 +91,7 @@ const useData = (data: Data) => {
     // innermost error handler takes priority ∴ reverse
     sortByPattern<ErrorHandler[]>(_errorHandlers).reverse();
   },
+  useLayout = (layout: Layout) => _layouts.set(layout.name, layout),
   useMiddleware = (middleware: Middleware) => {
     if (!("default" in middleware || "handler" in middleware)) return;
     _middleware.push({
@@ -90,23 +106,24 @@ const useData = (data: Data) => {
     _processors.sort((a, b) => a.target.localeCompare(b.target));
   },
   useRenderer = ({ name, targets, render }: Renderer) => {
-    _renderersByName.set(name, render);
+    _renderers.set(name, render);
     // split up targets to create sorted list of extension-associated engines
-    for (const target of targets) {
-      _renderersByExtension.push({ target, render });
-    }
+    for (const target of targets) _renderersByExtension.push({ target, name });
     _renderersByExtension.sort((a, b) => a.target.localeCompare(b.target));
   };
 
 export {
   getData,
   getErrorHandler,
+  getLayout,
+  getLayoutData,
   getMiddleware,
-  getProcessorsByExtension,
-  getRendererByName,
+  getProcessors,
+  getRenderer,
   getRenderersByExtension,
   useData,
   useErrorHandler,
+  useLayout,
   useMiddleware,
   useProcessor,
   useRenderer,

@@ -16,14 +16,14 @@ const md = unified()
   .use(rehypeStringify);
 
 useRenderer({
-  id: "njk",
+  name: "njk",
   targets: [".njk"],
   render: (page, ctx) => {
     return njk.renderString(page, Object.fromEntries(ctx.state.entries()));
   },
 });
 useRenderer({
-  id: "md",
+  name: "md",
   targets: [".md"],
   render: async (page) => String(await md.process(<string> page)),
 });

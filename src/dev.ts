@@ -1,14 +1,7 @@
-import {
-  dirname,
-  extname,
-  fromFileUrl,
-  join,
-  toFileUrl,
-} from "std/path/mod.ts";
 import { walk } from "std/fs/walk.ts";
 import { type Manifest } from "./server/types.ts";
 
-const collectRoutes = async (directory: URL) => {
+const collectImports = async (directory: URL) => {
   const routes = [],
     entries = walk(directory, {
       includeFiles: true,
@@ -23,21 +16,26 @@ const collectRoutes = async (directory: URL) => {
   return routes;
 };
 
-const generateManifest = (routes: string[]) => {
-  const imports = routes
-      .map((route, i) => `import * as $${i} from "./routes${route}";`),
-    references = routes
-      .map((route, i) => `    "${route}": $${i},`);
+const generateManifest = (scripts: string[]) => {
+  let routes = "", layouts = "", components = "", imports = "";
+  for (let i = 0; i < scripts.length; i++) {
+    imports += `\nimport * as $${i} from "./routes${scripts[i]}";`;
+    if (/^\/_layouts/.test(scripts[i])) {
+      layouts += `\n    "${scripts[i].slice(9)}": $${i},`;
+    } else if (/^\/_components/.test(scripts[i])) {
+      components += `\n    "${scripts[i].slice(12)}": $${i},`;
+    } else routes += `\n    "${scripts[i]}": $${i},`;
+  }
+
   return `// DO NOT EDIT. This file is automatically updated by nadder during
 // development when running \`dev.ts\`. This file should be checked
 // into version control and production environments.
-  
-${imports.join("\n")}
+${imports}
 
 const manifest = {
-  routes: {
-${references.join("\n")}
-  },
+  routes: {${routes}${routes.length ? "\n  " : ""}},
+  layouts: {${layouts}${layouts.length ? "\n  " : ""}},
+  components: {${components}${components.length ? "\n  " : ""}},
   importRoot: import.meta.url,
 };
 
@@ -46,8 +44,8 @@ export default manifest;
 };
 
 const dev = async (importRoot: Manifest["importRoot"], entrypoint: string) => {
-  const routes = await collectRoutes(new URL("./routes", importRoot)),
-    manifest = generateManifest(routes);
+  const scripts = await collectImports(new URL("./routes", importRoot)),
+    manifest = generateManifest(scripts);
   await Deno.writeTextFile(new URL("./manifest.gen.ts", importRoot), manifest);
   import(new URL(entrypoint, importRoot).href);
 };
