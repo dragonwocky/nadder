@@ -10,7 +10,7 @@ export default ((ctx) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${ctx.state.get("title")}</title>
 </head>
-<body>
+<body style="margin: 0">
   ${ctx.state.get("content")}
 </body>
 </html>`;

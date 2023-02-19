@@ -1,11 +1,14 @@
 import { type ErrorStatus, isErrorStatus } from "std/http/mod.ts";
 import type {
   _RenderFunction,
+  Component,
+  Context,
   Data,
   ErrorHandler,
   Layout,
   Middleware,
   Processor,
+  Promisable,
   Renderer,
 } from "./types.ts";
 
@@ -34,8 +37,11 @@ const sortByPattern = <T extends _PatternSortable[]>(handlers: T) => {
 
 type _Processor = { target: string; transform: Processor["transform"] };
 type _Renderer = { target: string; name: Renderer["name"] };
-type _ErrorHandler = ErrorHandler & { render: _RenderFunction<string> };
-const _data: Data[] = [],
+type _ErrorHandler = ErrorHandler & {
+  render: (ctx: Context) => Promisable<string>;
+};
+const _components: Map<Component["name"], Component> = new Map(),
+  _data: Data[] = [],
   _errorHandlers: _ErrorHandler[] = [],
   _layouts: Map<Layout["name"], Layout> = new Map(),
   _middleware: Middleware[] = [],
@@ -43,7 +49,9 @@ const _data: Data[] = [],
   _renderers: Map<Renderer["name"], Renderer["render"]> = new Map(),
   _renderersByExtension: _Renderer[] = [];
 
-const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
+const getComponents = (): Record<string, Component> =>
+    Object.fromEntries(_components.entries()),
+  getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
   getErrorHandler = (status: ErrorStatus, req: Request) => {
     const url = new URL(req.url);
     return _errorHandlers.find((handler) => {
@@ -78,7 +86,11 @@ const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
       .map((engine) => engine.name);
   };
 
-const useData = (data: Data) => {
+const useComponent = (comp: Component) => {
+    comp.render ??= comp.default;
+    if (comp.name && comp.render) _components.set(comp.name, comp.render);
+  },
+  useData = (data: Data) => {
     data.pattern ??= new URLPattern({ pathname: "/*?" });
     if (Object.keys(data).length < 2) return;
     _data.push(data);
@@ -91,7 +103,10 @@ const useData = (data: Data) => {
     // innermost error handler takes priority ∴ reverse
     sortByPattern<ErrorHandler[]>(_errorHandlers).reverse();
   },
-  useLayout = (layout: Layout) => _layouts.set(layout.name, layout),
+  useLayout = (layout: Layout) => {
+    layout.render ??= layout.default;
+    if (layout.name && layout.render) _layouts.set(layout.name, layout);
+  },
   useMiddleware = (middleware: Middleware) => {
     if (!("default" in middleware || "handler" in middleware)) return;
     _middleware.push({
@@ -113,6 +128,7 @@ const useData = (data: Data) => {
   };
 
 export {
+  getComponents,
   getData,
   getErrorHandler,
   getLayout,
@@ -121,6 +137,7 @@ export {
   getProcessors,
   getRenderer,
   getRenderersByExtension,
+  useComponent,
   useData,
   useErrorHandler,
   useLayout,

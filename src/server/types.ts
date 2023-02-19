@@ -115,7 +115,10 @@ interface File {
     | string;
 }
 
-type _RenderFunction<T = unknown> = (ctx: Context) => Promisable<T>;
+type _RenderFunction<T = unknown> = (
+  ctx: Context,
+  components: Record<string, Component>,
+) => Promisable<T>;
 interface Data {
   /**
    * data set in _data.* files is applied to the
@@ -137,65 +140,60 @@ type Route =
      */
     [k: string]: unknown;
     pattern?: URLPattern;
+    /**
+     * each route should export a page to be renderered via
+     * the matching render engine, either detected from the
+     * route's file extension or as specified by the
+     * `renderEngines` key of `ctx.state`
+     */
+    render?: _RenderFunction;
+    default?: Route["render"];
   }
   /**
    * middleware handlers that will act only on this
    * route (e.g. for prefetching data to store in state)
    */
-  & { [k in HttpMethod]?: Handler }
+  & { [k in HttpMethod]?: Handler };
+interface Middleware {
+  pattern?: URLPattern;
+  method?: HttpMethod;
   /**
-   * each route should export a page to be renderered via
-   * the matching render engine, either detected from the
-   * route's file extension or as specified by the
-   * `renderEngines` key of `ctx.state`
+   * used to differentiate between pre/postprocessing
+   * middleware handlers and route/file handlers. if
+   * middleware that match the request url exist but
+   * none have this flag set, a 405 method not allowed
+   * response will be sent
    */
-  & ({ default?: _RenderFunction } | { handler?: _RenderFunction });
-type Middleware =
-  & {
-    pattern?: URLPattern;
-    method?: HttpMethod;
-    /**
-     * used to differentiate between pre/postprocessing
-     * middleware handlers and route/file handlers. if
-     * middleware that match the request url exist but
-     * none have this flag set, a 405 method not allowed
-     * response will be sent
-     */
-    initialisesResponse?: boolean;
-  }
+  initialisesResponse?: boolean;
   /**
    * handlers defined in _middleware.* files
    * act on all adjacent or nested routes
    */
-  & ({ default: Handler } | { handler: Handler });
-type ErrorHandler =
-  & {
-    /**
-     * data to apply to `ctx.state` on error render.
-     * note: in the case of a http 500 error, the error
-     * will be accessible via `ctx.state.get("error")`
-     */
-    [k: string]: unknown;
-    pattern?: URLPattern;
-    status?: ErrorStatus;
-  }
+  handler?: Handler;
+  default?: Middleware["handler"];
+}
+interface ErrorHandler {
+  /**
+   * data to apply to `ctx.state` on error render.
+   * note: in the case of a http 500 error, the error
+   * will be accessible via `ctx.state.get("error")`
+   */
+  [k: string]: unknown;
+  pattern?: URLPattern;
+  status?: ErrorStatus;
   /**
    * the default http error pages can be overriden by
    * error page handlers exported from _status.* files.
    */
-  & ({ default: Handler } | { handler: Handler });
+  render?: _RenderFunction;
+  default?: ErrorHandler["render"];
+}
 interface Layout {
   /**
    * layout name, defaults to the pathname relative to
    * the `routes/_layouts` directory e.g. `post.njk`
    */
   name?: string;
-  /**
-   * if a page is rendered with the `layout` key of `ctx.state` set,
-   * the matching layout will be rendered and served with the rendered
-   * page's html set to the `content` key of `ctx.state`
-   */
-  default: _RenderFunction;
   /**
    * data to apply to `ctx.state` on render of any route
    * that uses this layout. this data is not accessible to
@@ -206,6 +204,13 @@ interface Layout {
    * `ctx.state` until the layout itself begins rendering
    */
   [k: string]: unknown;
+  /**
+   * if a page is rendered with the `layout` key of `ctx.state` set,
+   * the matching layout will be rendered and served with the rendered
+   * page's html set to the `content` key of `ctx.state`
+   */
+  render?: _RenderFunction;
+  default?: Layout["render"];
 }
 interface Component {
   /**
@@ -214,9 +219,13 @@ interface Component {
    */
   name?: string;
   /**
-   * TODO(dragonwocky)
+   * components do not affect or have access to `ctx.state`,
+   * but they can still specify which renderers to use via
+   * the `renderEngines` property
    */
-  default: _RenderFunction;
+  renderEngines?: string[];
+  render?: _RenderFunction;
+  default?: Component["render"];
 }
 
 interface Renderer {

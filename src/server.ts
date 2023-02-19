@@ -37,7 +37,7 @@ const start = async (manifest: Manifest, serveInit: ServeInit = {}) => {
             params = mw.pattern?.exec(ctx.url)?.pathname.groups ?? {},
             handler = "handler" in mw ? mw.handler : mw.default;
           if (!middleware.length) delete ctx.next;
-          return handler(req, { ...ctx, params });
+          return handler!(req, { ...ctx, params });
         },
         renderNotFound: () => renderErrorStatus(Status.NotFound),
         renderBadRequest: () => renderErrorStatus(Status.BadRequest),
