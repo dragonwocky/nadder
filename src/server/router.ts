@@ -13,7 +13,7 @@ import { extname } from "std/path/mod.ts";
 import { BUILD_ID, INTERNAL_PREFIX } from "../constants.ts";
 import {
   getProcessorsByExtension,
-  getRendererById,
+  getRendererByName,
   getRenderersByExtension,
   useData,
   useErrorHandler,
@@ -21,6 +21,7 @@ import {
 } from "./hooks.ts";
 import { walkDirectory } from "./reader.ts";
 import {
+  type _RenderFunction,
   type Context,
   type Data,
   type ErrorHandler,
@@ -29,7 +30,6 @@ import {
   HttpMethods,
   type Manifest,
   type Middleware,
-  type Renderer,
   type Route,
 } from "./types.ts";
 
@@ -61,11 +61,11 @@ const pathToPattern = (path: string): URLPattern => {
     body: string,
   ) => {
     let render;
-    if ("default" in route) render = route.default as Renderer<unknown>;
-    else if ("handler" in route) render = route.handler as Renderer<unknown>;
+    if ("default" in route) render = route.default as _RenderFunction;
+    else if ("handler" in route) render = route.handler as _RenderFunction;
     let page = (await render?.(ctx)) ?? body;
     const engines = ctx.state.has("renderEngines")
-      ? (ctx.state.get("renderEngines") as string[]).map(getRendererById)
+      ? (ctx.state.get("renderEngines") as string[]).map(getRendererByName)
         .filter((engine) => engine)
       : getRenderersByExtension(pathname);
     for (const engine of engines) page = await engine!(page, ctx);

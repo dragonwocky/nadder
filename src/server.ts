@@ -102,16 +102,18 @@ export {
   useRenderer,
 } from "./server/hooks.ts";
 export type {
+  Component,
   Context,
   Data,
   ErrorHandler,
   File,
-  FileProcessor,
   Handler,
   HttpMethod,
+  Layout,
   Manifest,
   Middleware,
-  RenderEngine,
+  Processor,
+  Promisable,
   Renderer,
   Route,
 } from "./server/types.ts";

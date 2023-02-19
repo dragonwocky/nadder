@@ -1,6 +1,8 @@
 import type { ErrorStatus } from "std/http/http_status.ts";
 import type { ConnInfo } from "std/http/mod.ts";
 
+type Promisable<T> = T | Promise<T>;
+
 const HttpMethods = [
   "*",
   "GET",
@@ -15,21 +17,21 @@ const HttpMethods = [
 ] as const;
 type HttpMethod = typeof HttpMethods[number];
 
+/**
+ * the manifest describes which routes should be registed
+ * and references exported handlers and data from them to
+ * avoid dependenc on dynamic imports. a `manifest.gen.ts`
+ * file is created based on an automatic index of the /routes
+ * directory when running nadder from `dev.ts`
+ */
 interface Manifest {
+  routes: Record<string, Data | Route | Middleware | ErrorHandler>;
+  layouts: Record<string, Layout>;
+  components: Record<string, Component>;
   /**
-   * the exported handlers and data from within the /routes
-   * directory, generated to avoid dependence on dynamic imports
-   */
-  routes: Record<
-    string,
-    | Data
-    | Route
-    | Middleware
-    | ErrorHandler
-  >;
-  /**
-   * the project root to import and serve routes and static files from,
-   * defaulting to the `import.meta.url` of the manifest.gen.ts file
+   * the project root to import and serve routes and static
+   * files from, defaulting to the `import.meta.url` of
+   * the manifest.gen.ts file
    */
   importRoot: string;
   /**
@@ -40,8 +42,6 @@ interface Manifest {
   ignorePattern?: RegExp;
 }
 
-type Promisable<T> = T | Promise<T>;
-type Renderer<T> = (ctx: Context) => Promisable<T>;
 type Handler = (
   req: Request,
   ctx: Context,
@@ -51,15 +51,17 @@ type Context = {
   params: Record<string, string | string[]>;
   /**
    * used to persist data across middleware handlers, has
-   * the non-handler exports and/or frontmatter of a route
-   * set to it by default. keys defined in _data.* files
-   * will be set to the `ctx.state` of all adjacent or
-   * nested routes
+   * non-handler exports and/or frontmatter of routes and
+   * their layouts set to it by default. keys defined in
+   * _data.* files will be set to the `ctx.state` of all
+   * adjacent or nested routes
    */
   state: Map<string, unknown>;
   /**
-   * only available to middleware handlers,
-   * for e.g. adding headers to a response
+   * only available to middleware, must be called to trigger the
+   * next middleware handler. handlers are executed outside-in, with
+   * the innermost handler responsible for returning the response
+   * i.e. /_middleware -> /about/_middleware -> /about/terms
    */
   next?: () => ReturnType<Handler>;
   /**
@@ -67,7 +69,7 @@ type Context = {
    * responding from a registered route, returns
    * the route rendered to a string of html
    */
-  render?: () => ReturnType<RenderEngine["render"]>;
+  render?: () => ReturnType<Renderer["render"]>;
   /**
    * creates a http response from any available _status.*
    * error handler pages, otherwise returns a plaintext
@@ -78,28 +80,76 @@ type Context = {
   renderUnauthorized: () => Promisable<Response>;
 } & ConnInfo;
 
+interface File {
+  /**
+   * a file url with the file's absolute path,
+   * used to read the file from the local filesystem
+   */
+  location: URL;
+  /**
+   * the file's path relative to the specified directory,
+   * used as the file's public path when served
+   */
+  pathname: string;
+  /**
+   * the size of the file in bytes,
+   * used in generating http headers
+   */
+  size: number;
+  /**
+   * a http content-type header value inc. mime type and encoding
+   * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Type
+   */
+  type: string;
+  /**
+   * hash of the file's path combined with the build id
+   * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
+   */
+  etag: string;
+  /**
+   * the file's contents, cached to avoid repeated
+   * file reads and processor transform calls
+   */
+  content:
+    | Uint8Array
+    | string;
+}
+
+type _RenderFunction<T = unknown> = (ctx: Context) => Promisable<T>;
 interface Data {
-  pattern?: URLPattern;
   /**
    * data set in _data.* files is applied to the
    * `ctx.state` of all adjacent or nested routes
    */
   [k: string]: unknown;
+  /**
+   * the pattern key is used to determine which routes to make
+   * this data available to. it will be overriden if set in a
+   * _data.* file but can be set to restrict data to certain
+   * routes when manually registering via `useData()`
+   */
+  pattern?: URLPattern;
 }
 type Route =
-  & ({ default?: Renderer<unknown> } | { handler?: Renderer<unknown> })
   & {
-    pattern?: URLPattern;
     /**
      * data to apply to `ctx.state` on route render
      */
     [k: string]: unknown;
+    pattern?: URLPattern;
   }
   /**
    * middleware handlers that will act only on this
    * route (e.g. for prefetching data to store in state)
    */
-  & { [k in HttpMethod]?: Handler };
+  & { [k in HttpMethod]?: Handler }
+  /**
+   * each route should export a page to be renderered via
+   * the matching render engine, either detected from the
+   * route's file extension or as specified by the
+   * `renderEngines` key of `ctx.state`
+   */
+  & ({ default?: _RenderFunction } | { handler?: _RenderFunction });
 type Middleware =
   & {
     pattern?: URLPattern;
@@ -118,13 +168,59 @@ type Middleware =
    * act on all adjacent or nested routes
    */
   & ({ default: Handler } | { handler: Handler });
+type ErrorHandler =
+  & {
+    /**
+     * data to apply to `ctx.state` on error render.
+     * note: in the case of a http 500 error, the error
+     * will be accessible via `ctx.state.get("error")`
+     */
+    [k: string]: unknown;
+    pattern?: URLPattern;
+    status?: ErrorStatus;
+  }
+  /**
+   * the default http error pages can be overriden by
+   * error page handlers exported from _status.* files.
+   */
+  & ({ default: Handler } | { handler: Handler });
+interface Layout {
+  /**
+   * layout name, defaults to the pathname relative to
+   * the `routes/_layouts` directory e.g. `post.njk`
+   */
+  name: string;
+  /**
+   * if a page is rendered with the `layout` key of `ctx.state` set,
+   * the matching layout will be rendered and served with the rendered
+   * page's html set to the `content` key of `ctx.state`
+   */
+  default: _RenderFunction;
+  /**
+   * data to apply to `ctx.state` on render of any route
+   * that uses this layout (accessible to route, may be
+   * overridden by route's own `ctx.state`)
+   */
+  [k: string]: unknown;
+}
+interface Component {
+  /**
+   * component name, defaults to the pathname relative to
+   * the `routes/_components` directory e.g. `button.tsx`
+   */
+  name: string;
+  /**
+   * TODO(dragonwocky)
+   */
+  default: _RenderFunction;
+}
 
-interface RenderEngine {
+interface Renderer {
   /**
    * engine name, used to manually select an engine or queue
    * multiple engines via the `renderEngines` key of `ctx.state`
    */
-  id: string;
+  name: string;
   /**
    * specifies which routes this engine can render.
    * renderers are sorted from highest to lowest specificity
@@ -147,7 +243,7 @@ interface RenderEngine {
    */
   render: (page: unknown, ctx: Context) => Promisable<string>;
 }
-interface FileProcessor {
+interface Processor {
   /**
    * specifies which files this processor can transform.
    * processors are sorted from highest to lowest specificity
@@ -162,63 +258,22 @@ interface FileProcessor {
    */
   transform: (file: File) => Promisable<File>;
 }
-/**
- * the default http error pages can be overriden by
- * error page handlers exported from _status.* files.
- * note: in the case of a http 500 error, the error will
- * be accessible via `ctx.state.get("error")`
- */
-type ErrorHandler =
-  & { pattern?: URLPattern; status?: ErrorStatus; [k: string]: unknown }
-  & ({ default: Handler } | { handler: Handler });
 
-interface File {
-  /**
-   * a file url with the file's absolute path,
-   * used to read the file from the local filesystem
-   */
-  location: URL;
-  /**
-   * the file's path relative to the static/ directory,
-   * used as the file's public path when served
-   */
-  pathname: string;
-  /**
-   * the size of the file in bytes,
-   * used in generating http headers
-   */
-  size: number;
-  /**
-   * a http content-type header value inc. mime type and encoding
-   * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Type
-   */
-  type: string;
-  /**
-   * hash of the file's contents
-   * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
-   */
-  etag: string;
-  /**
-   * the file's contents, cached to reduce repeated file reads
-   * and plugin processing of files
-   */
-  content:
-    | Uint8Array
-    | string;
-}
-
-export { HttpMethods };
 export type {
+  _RenderFunction,
+  Component,
   Context,
   Data,
   ErrorHandler,
   File,
-  FileProcessor,
   Handler,
   HttpMethod,
+  Layout,
   Manifest,
   Middleware,
-  RenderEngine,
+  Processor,
+  Promisable,
   Renderer,
   Route,
 };
+export { HttpMethods };

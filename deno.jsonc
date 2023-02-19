@@ -1,7 +1,7 @@
 {
   "tasks": {
-    "www": "deno run -A --watch=www/static/,www/routes/ www/dev.ts",
-    "test": "deno run -A --watch=www/static/,www/routes/ www/test.ts"
+    "dev": "deno run -A --watch=www/static/,www/routes/ www/dev.ts",
+    "start": "deno run -A --watch=www/static/,www/routes/ www/main.ts"
   },
   "imports": {
     "nadder/": "./src/",
