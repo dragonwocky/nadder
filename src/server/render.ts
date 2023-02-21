@@ -4,36 +4,70 @@ import {
   getLayoutData,
   getRenderer,
 } from "./hooks.ts";
-import { type _RenderFunction, type Context } from "./types.ts";
+import type {
+  _RenderFunction,
+  _ResolvableComponent,
+  Component,
+  Context,
+  Props,
+} from "./types.ts";
 
-const _renderPage = async (ctx: Context, render: _RenderFunction) => {
-    let content = await render?.(ctx, getComponents()) ?? "";
-    const engines = (ctx.state.get("renderEngines") as string[] ?? [])
-      .map(getRenderer).filter((engine) => engine);
-    for (const engine of engines) content = await engine!(content, ctx);
-    const layout = getLayout(ctx.state.get("layout") as string);
-    if (layout) {
-      ctx.state.set("content", content);
-      ctx.state.set("layout", layout.layout);
-      ctx.state.set("renderEngines", layout.renderEngines);
-      const render = layout.render as _RenderFunction<unknown>;
-      content = await _renderPage(ctx, render);
+const getResolvableComponents = (ctx: Context) => {
+    const components = getComponents(),
+      resolvable: Record<string, _ResolvableComponent> = {};
+    for (const key in components) {
+      resolvable[key] = (props) => {
+        const res = renderComponent(ctx, components[key], props),
+          id = crypto.randomUUID().replace(/-/g, "");
+        ctx.state.set(`_comp_${id}`, res);
+        res.toString = () => `<!--<Component id="${id}" />-->`;
+        return res as Promise<string> & string;
+      };
     }
-    return String(content);
+    return resolvable;
   },
-  renderPage = (ctx: Context, render: _RenderFunction) => {
-    // assign layout data only at start of render chain
-    const layoutName = ctx.state.get("layout") as string,
-      layoutData = getLayoutData(layoutName);
-    for (const key in layoutData) {
-      // route-specific data has priority over layout data
-      if (!ctx.state.has(key)) ctx.state.set(key, layoutData[key]);
+  resolveComponents = async (ctx: Context, content: string) => {
+    const pattern = /<!--<Component\sid=["|']([a-zA-Z10-9]+)["|']\s\/>-->/;
+    while (pattern.test(content)) {
+      const [, id] = content.match(pattern)!,
+        comp = await (ctx.state.get(`_comp_${id}`) as Promise<string>);
+      content = content.replace(pattern, comp ?? "");
     }
-    return _renderPage(ctx, render);
+    return content;
+  },
+  renderComponent = async (ctx: Context, comp: Component, props: Props) => {
+    let content = await comp.render?.(props, getResolvableComponents(ctx));
+    const engines = (comp.renderEngines ?? [])
+      .map(getRenderer).filter((engine) => engine);
+    for (const engine of engines) content = await engine!(content ?? "", props);
+    return String(content);
   };
 
-const renderComponent = () => {
-  //
-};
+const _renderPage = async (
+    ctx: Context,
+    render: _RenderFunction,
+  ): Promise<string> => {
+    let content = await render?.(ctx, getResolvableComponents(ctx));
+    const engines = (ctx.state.get("renderEngines") as string[] ?? [])
+        .map(getRenderer).filter((engine) => engine),
+      state = Object.fromEntries(ctx.state.entries());
+    for (const engine of engines) content = await engine!(content ?? "", state);
 
-export { renderComponent, renderPage };
+    const layout = getLayout(ctx.state.get("layout") as string);
+    if (!layout) return String(content);
+    ctx.state.set("content", content);
+    ctx.state.set("layout", layout.layout);
+    ctx.state.set("renderEngines", layout.renderEngines);
+    return _renderPage(ctx, layout.render as _RenderFunction<unknown>);
+  },
+  renderPage = async (ctx: Context, render: _RenderFunction) => {
+    // assign layout data only at start of render chain
+    const data = getLayoutData(ctx.state.get("layout") as string);
+    for (const key in data) {
+      // route-specific data has priority over layout data
+      if (!ctx.state.has(key)) ctx.state.set(key, data[key]);
+    }
+    return resolveComponents(ctx, await _renderPage(ctx, render));
+  };
+
+export { renderPage };

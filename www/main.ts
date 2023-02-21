@@ -18,9 +18,7 @@ const md = unified()
 useRenderer({
   name: "njk",
   targets: [".njk"],
-  render: (page, ctx) => {
-    return njk.renderString(page, Object.fromEntries(ctx.state.entries()));
-  },
+  render: (page, state) => njk.renderString(page, state),
 });
 useRenderer({
   name: "md",

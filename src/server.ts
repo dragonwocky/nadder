@@ -6,8 +6,14 @@ import {
   Status,
   STATUS_TEXT,
 } from "std/http/mod.ts";
-import { getData, getErrorHandler, getMiddleware } from "./server/hooks.ts";
-import { indexLayouts, indexRoutes, indexStatic } from "./server/router.ts";
+import {
+  getData,
+  getErrorHandler,
+  getMiddleware,
+  useComponent,
+  useLayout,
+} from "./server/hooks.ts";
+import { indexRoutes, indexStatic, indexTemplates } from "./server/router.ts";
 import type {
   Context,
   HttpMethod,
@@ -22,7 +28,8 @@ const start = async (manifest: Manifest, serveInit: ServeInit = {}) => {
   });
 
   await Promise.all([
-    indexLayouts(manifest),
+    indexTemplates(manifest, "components", useComponent),
+    indexTemplates(manifest, "layouts", useLayout),
     indexRoutes(manifest),
     indexStatic(manifest),
   ]);
@@ -124,8 +131,6 @@ export type {
 export { start };
 
 /**
- * [] layouts
- * [] components
  * [] remote files (fwding)
  * [] interactive islands (via components + plugins?)
  * [] helpers/filters (e.g. for internationalisation)

@@ -117,7 +117,7 @@ interface File {
 
 type _RenderFunction<T = unknown> = (
   ctx: Context,
-  components: Record<string, Component>,
+  components: Record<string, _ResolvableComponent>,
 ) => Promisable<T>;
 interface Data {
   /**
@@ -147,6 +147,7 @@ type Route =
      * `renderEngines` key of `ctx.state`
      */
     render?: _RenderFunction;
+    renderEngines?: string[];
     default?: Route["render"];
   }
   /**
@@ -186,6 +187,7 @@ interface ErrorHandler {
    * error page handlers exported from _status.* files.
    */
   render?: _RenderFunction;
+  renderEngines?: string[];
   default?: ErrorHandler["render"];
 }
 interface Layout {
@@ -210,8 +212,12 @@ interface Layout {
    * page's html set to the `content` key of `ctx.state`
    */
   render?: _RenderFunction;
+  renderEngines?: string[];
   default?: Layout["render"];
 }
+
+// deno-lint-ignore no-explicit-any
+type Props = any;
 interface Component {
   /**
    * component name, defaults to the pathname relative to
@@ -223,10 +229,24 @@ interface Component {
    * but they can still specify which renderers to use via
    * the `renderEngines` property
    */
+  render?: (
+    props: Props,
+    components: Record<string, _ResolvableComponent>,
+  ) => Promisable<string>;
   renderEngines?: string[];
-  render?: _RenderFunction;
   default?: Component["render"];
 }
+/**
+ * components are rendered asynchronously, but to be used
+ * with some templating engines need to return a synchronous
+ * value. by overriding the unresolved promise's `toString()`
+ * method to return a placeholder (which is then replaced by
+ * the actual rendered component at the end of the render process),
+ * pseudo-synchronous component rendering is achieved. the actual
+ * rendered component can still be accessed by `await`-ing the
+ * returned value in an asynchronous context
+ */
+type _ResolvableComponent = (props?: Props) => Promise<string> & string;
 
 interface Renderer {
   /**
@@ -254,7 +274,7 @@ interface Renderer {
    * extracted and set to `ctx.state`. all consequent renderers called
    * will be passed the output of the previous renderer
    */
-  render: (page: unknown, ctx: Context) => Promisable<string>;
+  render: (page: unknown, state: Record<string, unknown>) => Promisable<string>;
 }
 interface Processor {
   /**
@@ -274,6 +294,7 @@ interface Processor {
 
 export type {
   _RenderFunction,
+  _ResolvableComponent,
   Component,
   Context,
   Data,
@@ -286,6 +307,7 @@ export type {
   Middleware,
   Processor,
   Promisable,
+  Props,
   Renderer,
   Route,
 };

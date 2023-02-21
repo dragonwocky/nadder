@@ -16,7 +16,6 @@ import {
   getRenderersByExtension,
   useData,
   useErrorHandler,
-  useLayout,
   useMiddleware,
 } from "./hooks.ts";
 import { walkDirectory } from "./reader.ts";
@@ -35,7 +34,6 @@ import {
 } from "./types.ts";
 
 const pathToPattern = (path: string): URLPattern => {
-  // if (ignoreExtension) path = path.slice(0, -extname(path).length);
   return new URLPattern({
     pathname: path.split("/")
       .map((part) => {
@@ -56,22 +54,41 @@ const pathToPattern = (path: string): URLPattern => {
   });
 };
 
-const indexLayouts = async (manifest: Manifest) => {
+type _Template = {
+  name?: string;
+  // deno-lint-ignore no-explicit-any
+  render?: any;
+  renderEngines?: string[];
+  default?: _Template["render"];
+};
+const indexTemplates = async <T extends _Template>(
+  manifest: Manifest,
+  type: Exclude<
+    {
+      [K in keyof Manifest]: Manifest[K] extends Record<string, T> ? K
+        : never;
+    }[keyof Manifest],
+    undefined
+  >,
+  hook: (tmpl: T) => void,
+) => {
   const decoder = new TextDecoder("utf-8"),
-    dir = new URL("./routes/_layouts", manifest.importRoot),
+    dir = new URL(`./routes/_${type}`, manifest.importRoot),
     files = await walkDirectory(dir);
   for (const { content, pathname } of files) {
-    const layout = { ...(manifest.layouts[pathname] ?? {}) };
+    if (manifest.ignorePattern?.test(pathname)) continue;
+
+    const tmpl = { ...(manifest[type][pathname] ?? {}) } as T;
     let body = decoder.decode(content as Uint8Array);
     if (hasFrontmatter(body)) {
       const { body: _body, attrs } = extractFrontmatter(body);
-      Object.assign(layout, attrs);
+      Object.assign(tmpl, attrs);
       body = _body;
     }
-    layout.name ??= pathname.slice(1);
-    layout.render ??= layout.default ?? (() => body);
-    layout.renderEngines ??= getRenderersByExtension(pathname);
-    useLayout(layout);
+    tmpl.name ??= pathname.slice(1);
+    tmpl.render ??= tmpl.default ?? (() => body);
+    tmpl.renderEngines ??= getRenderersByExtension(pathname);
+    hook(tmpl);
   }
 };
 
@@ -194,4 +211,4 @@ const indexStatic = async (manifest: Manifest) => {
   }));
 };
 
-export { indexLayouts, indexRoutes, indexStatic };
+export { indexRoutes, indexStatic, indexTemplates };

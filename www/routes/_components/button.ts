@@ -1,9 +1,5 @@
-import { Component } from "nadder/server.ts";
+import { type Component } from "nadder/server.ts";
 
-export const title = "Title";
-
-export default ((ctx) => {
-  return `<button>
-  ${ctx.state.get("content")}
-</button>`;
+export default ((props) => {
+  return `<button>${props.name}</button>`;
 }) as Component["default"];

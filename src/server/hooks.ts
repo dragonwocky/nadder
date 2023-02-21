@@ -88,7 +88,7 @@ const getComponents = (): Record<string, Component> =>
 
 const useComponent = (comp: Component) => {
     comp.render ??= comp.default;
-    if (comp.name && comp.render) _components.set(comp.name, comp.render);
+    if (comp.name && comp.render) _components.set(comp.name, comp);
   },
   useData = (data: Data) => {
     data.pattern ??= new URLPattern({ pathname: "/*?" });
