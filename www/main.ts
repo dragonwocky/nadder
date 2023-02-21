@@ -1,29 +1,14 @@
+import eta from "nadder/renderers/eta.ts";
+import md from "nadder/renderers/markdown.ts";
+import njk from "nadder/renderers/nunjucks.ts";
+import pug from "nadder/renderers/pug.ts";
+import liquid from "nadder/renderers/liquid.ts";
+import { start, useRenderer } from "nadder/server.ts";
 import manifest from "./manifest.gen.ts";
-import { start, useRenderer } from "../src/server.ts";
-import njk from "npm:nunjucks";
-import { unified } from "npm:unified";
-import remarkParse from "npm:remark-parse";
-import remarkFrontmatter from "npm:remark-frontmatter";
-import remarkGfm from "npm:remark-gfm";
-import remarkRehype from "npm:remark-rehype";
-import rehypeStringify from "npm:rehype-stringify";
 
-const md = unified()
-  .use(remarkParse)
-  .use(remarkFrontmatter)
-  .use(remarkGfm)
-  .use(remarkRehype)
-  .use(rehypeStringify);
-
-useRenderer({
-  name: "njk",
-  targets: [".njk"],
-  render: (page, state) => njk.renderString(page, state),
-});
-useRenderer({
-  name: "md",
-  targets: [".md"],
-  render: async (page) => String(await md.process(<string> page)),
-});
-
+useRenderer(eta);
+useRenderer(pug);
+useRenderer(liquid);
+useRenderer(md);
+useRenderer(njk);
 start(manifest);

@@ -131,7 +131,6 @@ export type {
 export { start };
 
 /**
- * [] remote files (fwding)
  * [] interactive islands (via components + plugins?)
  * [] helpers/filters (e.g. for internationalisation)
  */

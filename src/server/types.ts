@@ -63,13 +63,13 @@ type Context = {
    * the innermost handler responsible for returning the response
    * i.e. /_middleware -> /about/_middleware -> /about/terms
    */
-  next?: () => ReturnType<Handler>;
+  next?: () => Promisable<Response>;
   /**
    * only available to middleware handlers when
    * responding from a registered route, returns
    * the route rendered to a string of html
    */
-  render?: () => ReturnType<Renderer["render"]>;
+  render?: () => Promisable<string>;
   /**
    * creates a http response from any available _status.*
    * error handler pages, otherwise returns a plaintext

@@ -1,4 +1,4 @@
-import { ASSET_CACHE_KEY, BUILD_ID, INTERNAL_PREFIX } from "../constants.ts";
+import { BUILD_ID, INTERNAL_PREFIX } from "../constants.ts";
 
 const hashAssetPath = (path: string) => {
     if (!path.startsWith("/") || path.startsWith("//")) return path;
@@ -6,9 +6,9 @@ const hashAssetPath = (path: string) => {
       url = new URL(path, `https://${localUrlhost}`),
       isHttps = url.protocol === "https:",
       isLocalUrl = url.host === localUrlhost,
-      isAlreadyHashed = url.searchParams.has(ASSET_CACHE_KEY);
+      isAlreadyHashed = url.searchParams.has(`${INTERNAL_PREFIX}_cache_id`);
     if (!isHttps || !isLocalUrl || isAlreadyHashed) return path;
-    url.searchParams.set(ASSET_CACHE_KEY, BUILD_ID);
+    url.searchParams.set(`${INTERNAL_PREFIX}_cache_id`, BUILD_ID);
     return url.pathname + url.search + url.hash;
   },
   hashAssetSrcSet = (srcset: string) => {
