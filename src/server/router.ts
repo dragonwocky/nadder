@@ -48,7 +48,7 @@ const pathToPattern = (path: string): URLPattern => {
       // /route/index is equiv to -> /route
       .replace(/\/index$/, "")
       // /*? matches all nested routes
-      .replace(/\/_(middleware|data)$/, "/*?")
+      .replace(/\/_(middleware|data|\d\d\d)$/, "/*?")
       // ensure starting slash and remove repeat slashes
       .replace(/(^\/*|\/+)/g, "/"),
   });
@@ -97,7 +97,7 @@ const indexRoutes = async (manifest: Manifest) => {
     files = await walkDirectory(new URL("./routes", manifest.importRoot));
 
   for (const { content, pathname } of files) {
-    const [, status] = pathname.match(/\/_(\d+)+\.[^/]+$/) ?? [],
+    const [, status] = pathname.match(/\/_(\d\d\d)\.[^/]+$/) ?? [],
       isData = /\/_data\.[^/]+$/.test(pathname),
       isMiddleware = /\/_middleware\.[^/]+$/.test(pathname),
       isErrorHandler = isErrorStatus(+status);
@@ -138,7 +138,7 @@ const indexRoutes = async (manifest: Manifest) => {
           ...errorHandler,
           render: (ctx: Context) => {
             for (const key in data) ctx.state.set(key, data[key]);
-            return renderPage(ctx, errorHandler.handler as _RenderFunction);
+            return renderPage(ctx, errorHandler.render as _RenderFunction);
           },
         });
       } else {

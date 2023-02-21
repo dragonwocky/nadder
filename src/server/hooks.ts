@@ -98,7 +98,7 @@ const useComponent = (comp: Component) => {
   },
   useErrorHandler = (errorHandler: _ErrorHandler) => {
     if (!isErrorStatus(errorHandler.status!)) return;
-    if (!("default" in errorHandler || "handler" in errorHandler)) return;
+    if (!("default" in errorHandler || "render" in errorHandler)) return;
     _errorHandlers.push(errorHandler);
     // innermost error handler takes priority ∴ reverse
     sortByPattern<ErrorHandler[]>(_errorHandlers).reverse();
