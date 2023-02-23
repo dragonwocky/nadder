@@ -6,5 +6,10 @@ const engine = new Liquid();
 export default ({
   name: "liquid",
   targets: [".liquid"],
-  render: (template, props) => engine.parseAndRender(String(template), props),
+  render: (template, props) => {
+    for (const name in props.filters) {
+      engine.registerFilter(name, props.filters[name]);
+    }
+    return engine.parseAndRender(String(template), props);
+  },
 }) as Renderer;

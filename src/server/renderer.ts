@@ -1,5 +1,6 @@
 import {
   getComponents,
+  getFilters,
   getLayout,
   getLayoutData,
   getRenderer,
@@ -24,14 +25,14 @@ const renderComponent = async <P>(ctx: Context, {
   renderProps,
   engineProps,
 }: _RenderArgs<P>) => {
-  const components = getResolvableComponents(ctx);
-  let content = await renderFunc?.(renderProps, components);
+  const components = getResolvableComponents(ctx),
+    filters = getFilters();
+  let content = await renderFunc?.(renderProps, components, filters);
   if (renderEngines) {
     const engines = renderEngines.map(getRenderer)
-      .filter((engine): engine is Renderer["render"] => !!engine);
-    for (const engine of engines) {
-      content = await engine(content, { ...engineProps, comp: components });
-    }
+        .filter((engine): engine is Renderer["render"] => !!engine),
+      props = { ...engineProps, comp: components, filters };
+    for (const engine of engines) content = await engine(content, props);
   }
   return content;
 };

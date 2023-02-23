@@ -124,6 +124,7 @@ interface File {
 type _RenderFunc<P> = (
   props: P,
   components: Record<string, _ResolvableComponent>,
+  filters: Record<string, Filter>,
 ) => Promisable<unknown>;
 interface Data {
   /**
@@ -289,9 +290,25 @@ interface Renderer {
    */
   render: (
     template: unknown,
-    props: Props & Record<"comp", Record<string, _ResolvableComponent>>,
+    props:
+      & Props
+      & Record<"comp", Record<string, _ResolvableComponent>>
+      & Record<"filters", Record<string, Filter>>,
   ) => Promisable<string>;
 }
+/**
+ * a generic filter type that can be called from
+ * any implementing templating engine (e.g. via
+ * {{ name | upper } in nunjucks and liquid,
+ * or <%~ filter.upper("name") %> in eta). note:
+ * different templating engines may pass arguments
+ * differently to filters (e.g. pug will pass text
+ * to the first arg and an options object to the
+ * second arg, while other templating engines may
+ * pass data to any number of arguments)
+ */
+// deno-lint-ignore no-explicit-any
+type Filter = (...args: any[]) => Promisable<string>;
 
 interface Processor {
   /**
@@ -317,6 +334,7 @@ export type {
   Data,
   ErrorHandler,
   File,
+  Filter,
   Handler,
   HttpMethod,
   Layout,

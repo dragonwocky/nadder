@@ -19,7 +19,7 @@ import {
   useMiddleware,
 } from "./hooks.ts";
 import { walkDirectory } from "./reader.ts";
-import { renderPage } from "./render.ts";
+import { renderPage } from "./renderer.ts";
 import {
   type Context,
   type Data,

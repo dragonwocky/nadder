@@ -13,7 +13,7 @@ import {
   useComponent,
   useLayout,
 } from "./server/hooks.ts";
-import { indexRoutes, indexStatic, indexTemplates } from "./server/router.ts";
+import { indexRoutes, indexStatic, indexTemplates } from "./server/indexer.ts";
 import type {
   Context,
   HttpMethod,
@@ -108,6 +108,7 @@ const start = async (manifest: Manifest, serveInit: ServeInit = {}) => {
 
 export {
   useData,
+  useFilter,
   useMiddleware,
   useProcessor,
   useRenderer,
@@ -118,6 +119,7 @@ export type {
   Data,
   ErrorHandler,
   File,
+  Filter,
   Handler,
   HttpMethod,
   Layout,
@@ -131,6 +133,6 @@ export type {
 export { start };
 
 /**
- * [] interactive islands (via components + plugins?)
- * [] helpers/filters (e.g. for internationalisation)
+ * route postprocessors: e.g. twind
+ * interactive islands (isomorphic routes): via renderer/postprocessor?
  */

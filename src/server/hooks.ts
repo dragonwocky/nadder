@@ -4,6 +4,7 @@ import type {
   Context,
   Data,
   ErrorHandler,
+  Filter,
   Layout,
   Middleware,
   Processor,
@@ -39,24 +40,17 @@ type _Renderer = { target: string; name: Renderer["name"] };
 type _ErrorHandler = ErrorHandler & {
   render: (ctx: Context) => Promisable<string>;
 };
-const _components: Map<Component["name"], Component> = new Map(),
-  _data: Data[] = [],
-  _errorHandlers: _ErrorHandler[] = [],
+const _data: Data[] = [],
   _layouts: Map<Layout["name"], Layout> = new Map(),
+  _components: Map<Component["name"], Component> = new Map(),
+  _filters: Map<string, Filter> = new Map(),
   _middleware: Middleware[] = [],
+  _errorHandlers: _ErrorHandler[] = [],
   _processors: _Processor[] = [],
   _renderers: Map<Renderer["name"], Renderer["render"]> = new Map(),
   _renderersByExtension: _Renderer[] = [];
 
-const getComponents = (): Record<string, Component> =>
-    Object.fromEntries(_components),
-  getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
-  getErrorHandler = (status: ErrorStatus, req: Request) => {
-    const url = new URL(req.url);
-    return _errorHandlers.find((handler) => {
-      return handler.status === status && handler.pattern!.exec(url);
-    })?.render;
-  },
+const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
   getLayout = (name: Layout["name"]) => _layouts.get(name),
   getLayoutData = (name: Layout["name"]) => {
     let data: Data = { layout: name };
@@ -70,8 +64,20 @@ const getComponents = (): Record<string, Component> =>
     delete data.renderEngines;
     return data;
   },
+  getComponents = (): Record<string, Component> => {
+    return Object.fromEntries(_components);
+  },
+  getFilters = (): Record<string, Filter> => {
+    return Object.fromEntries(_filters);
+  },
   getMiddleware = (url: URL) => {
     return _middleware.filter((mw) => mw.pattern!.exec(url));
+  },
+  getErrorHandler = (status: ErrorStatus, req: Request) => {
+    const url = new URL(req.url);
+    return _errorHandlers.find((handler) => {
+      return handler.status === status && handler.pattern!.exec(url);
+    })?.render;
   },
   getProcessors = (pathname: string) => {
     return _processors
@@ -85,26 +91,22 @@ const getComponents = (): Record<string, Component> =>
       .map((engine) => engine.name);
   };
 
-const useComponent = (comp: Component) => {
-    comp.render ??= comp.default;
-    if (comp.name && comp.render) _components.set(comp.name, comp);
-  },
-  useData = (data: Data) => {
+const useData = (data: Data) => {
     data.pattern ??= new URLPattern({ pathname: "/*?" });
     if (Object.keys(data).length < 2) return;
     _data.push(data);
     sortByPattern<Data[]>(_data);
   },
-  useErrorHandler = (errorHandler: _ErrorHandler) => {
-    if (!isErrorStatus(errorHandler.status!)) return;
-    if (!("default" in errorHandler || "render" in errorHandler)) return;
-    _errorHandlers.push(errorHandler);
-    // innermost error handler takes priority ∴ reverse
-    sortByPattern<ErrorHandler[]>(_errorHandlers).reverse();
-  },
   useLayout = (layout: Layout) => {
     layout.render ??= layout.default;
     if (layout.name && layout.render) _layouts.set(layout.name, layout);
+  },
+  useComponent = (comp: Component) => {
+    comp.render ??= comp.default;
+    if (comp.name && comp.render) _components.set(comp.name, comp);
+  },
+  useFilter = (name: string, filter: Filter) => {
+    _filters.set(name, filter);
   },
   useMiddleware = (middleware: Middleware) => {
     if (!("default" in middleware || "handler" in middleware)) return;
@@ -114,6 +116,13 @@ const useComponent = (comp: Component) => {
       ...middleware,
     });
     sortByPattern<Middleware[]>(_middleware);
+  },
+  useErrorHandler = (errorHandler: _ErrorHandler) => {
+    if (!isErrorStatus(errorHandler.status!)) return;
+    if (!("default" in errorHandler || "render" in errorHandler)) return;
+    _errorHandlers.push(errorHandler);
+    // innermost error handler takes priority ∴ reverse
+    sortByPattern<ErrorHandler[]>(_errorHandlers).reverse();
   },
   useProcessor = ({ targets, transform }: Processor) => {
     for (const target of targets) _processors.push({ target, transform });
@@ -130,6 +139,7 @@ export {
   getComponents,
   getData,
   getErrorHandler,
+  getFilters,
   getLayout,
   getLayoutData,
   getMiddleware,
@@ -139,6 +149,7 @@ export {
   useComponent,
   useData,
   useErrorHandler,
+  useFilter,
   useLayout,
   useMiddleware,
   useProcessor,
