@@ -6,5 +6,5 @@ const engine = new Liquid();
 export default ({
   name: "liquid",
   targets: [".liquid"],
-  render: (page, state) => engine.parseAndRender(String(page), state),
+  render: (template, props) => engine.parseAndRender(String(template), props),
 }) as Renderer;

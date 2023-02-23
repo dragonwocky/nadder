@@ -56,7 +56,13 @@ type Context = {
    * _data.* files will be set to the `ctx.state` of all
    * adjacent or nested routes
    */
-  state: Map<string, unknown>;
+  state:
+    & Map<`_comp_${string}`, Promise<string>>
+    & Map<"layout", string | undefined>
+    & Map<"renderEngines", string[] | undefined>
+    & Map<"contentType", string | undefined>
+    & Map<"error", Error>
+    & Map<string, unknown>;
   /**
    * only available to middleware, must be called to trigger the
    * next middleware handler. handlers are executed outside-in, with
@@ -115,10 +121,10 @@ interface File {
     | string;
 }
 
-type _RenderFunction<T = unknown> = (
-  ctx: Context,
+type _RenderFunc<P> = (
+  props: P,
   components: Record<string, _ResolvableComponent>,
-) => Promisable<T>;
+) => Promisable<unknown>;
 interface Data {
   /**
    * data set in _data.* files is applied to the
@@ -140,13 +146,14 @@ type Route =
      */
     [k: string]: unknown;
     pattern?: URLPattern;
+    layout?: string;
     /**
      * each route should export a page to be renderered via
      * the matching render engine, either detected from the
      * route's file extension or as specified by the
      * `renderEngines` key of `ctx.state`
      */
-    render?: _RenderFunction;
+    render?: _RenderFunc<Context>;
     renderEngines?: string[];
     default?: Route["render"];
   }
@@ -177,16 +184,17 @@ interface ErrorHandler {
   /**
    * data to apply to `ctx.state` on error render.
    * note: in the case of a http 500 error, the error
-   * will be accessible via `ctx.state.get("error")`
+   * will be accessible via the `error` key of `ctx.state`
    */
   [k: string]: unknown;
   pattern?: URLPattern;
   status?: ErrorStatus;
+  layout?: string;
   /**
    * the default http error pages can be overriden by
    * error page handlers exported from _status.* files.
    */
-  render?: _RenderFunction;
+  render?: _RenderFunc<Context>;
   renderEngines?: string[];
   default?: ErrorHandler["render"];
 }
@@ -196,6 +204,11 @@ interface Layout {
    * the `routes/_layouts` directory e.g. `post.njk`
    */
   name?: string;
+  /**
+   * parent layout to inherit state from and
+   * be rendered inside of
+   */
+  layout?: string;
   /**
    * data to apply to `ctx.state` on render of any route
    * that uses this layout. this data is not accessible to
@@ -208,16 +221,16 @@ interface Layout {
   [k: string]: unknown;
   /**
    * if a page is rendered with the `layout` key of `ctx.state` set,
-   * the matching layout will be rendered and served with the rendered
-   * page's html set to the `content` key of `ctx.state`
+   * the matching layout will be rendered and served with `ctx.state`
+   * passed in object form and the rendered page's html set to the
+   * `content` key of that object
    */
-  render?: _RenderFunction;
+  render?: _RenderFunc<Props & Record<"content", unknown>>;
   renderEngines?: string[];
   default?: Layout["render"];
 }
 
-// deno-lint-ignore no-explicit-any
-type Props = any;
+type Props = Record<string, unknown>;
 interface Component {
   /**
    * component name, defaults to the pathname relative to
@@ -229,10 +242,7 @@ interface Component {
    * but they can still specify which renderers to use via
    * the `renderEngines` property
    */
-  render?: (
-    props: Props,
-    components: Record<string, _ResolvableComponent>,
-  ) => Promisable<string>;
+  render?: _RenderFunc<Props>;
   renderEngines?: string[];
   default?: Component["render"];
 }
@@ -261,21 +271,28 @@ interface Renderer {
    * should be called on a route in. `*` matches all routes but
    * has the lowest specificity
    */
-  targets: string[];
+  targets: ("*" | string)[];
   /**
    * called on targeted routes each time they are requested
    * to transform route data. this must return a string of html.
    *
    * if this is the renderer with the highest priority and the
    * route is a javascript file, the renderer is passed the return
-   * value of the route's default export with the named exports set
-   * to `ctx.state`. if the route is any other file type, the renderer
-   * is passed the file's contents as a string with any frontmatter
-   * extracted and set to `ctx.state`. all consequent renderers called
-   * will be passed the output of the previous renderer
+   * value of the route's default export. if the route is any other
+   * file type, the renderer is passed the file's contents as a string.
+   * all consequent renderers called will be passed the output of the
+   * previous renderer. the passed props are `ctx.state` in object form
+   * if rendering a page or layout, or a user-provided object when
+   * rendering a component. registered components are provided via
+   * the `props.comp` object, for referencing components within templates.
+   * when rendering a layout, `props.content` is set to the page's contents
    */
-  render: (page: unknown, state: Record<string, unknown>) => Promisable<string>;
+  render: (
+    template: unknown,
+    props: Props & Record<"comp", Record<string, _ResolvableComponent>>,
+  ) => Promisable<string>;
 }
+
 interface Processor {
   /**
    * specifies which files this processor can transform.
@@ -284,7 +301,7 @@ interface Processor {
    * should be called on a file in. `*` matches all files but
    * has the lowest specificity
    */
-  targets: string[];
+  targets: ("*" | string)[];
   /**
    * called once on targeted files on server startup to
    * preprocess file contents, types and/or pathnames
@@ -293,7 +310,7 @@ interface Processor {
 }
 
 export type {
-  _RenderFunction,
+  _RenderFunc,
   _ResolvableComponent,
   Component,
   Context,

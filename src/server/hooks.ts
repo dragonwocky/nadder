@@ -1,6 +1,5 @@
 import { type ErrorStatus, isErrorStatus } from "std/http/mod.ts";
 import type {
-  _RenderFunction,
   Component,
   Context,
   Data,
@@ -50,7 +49,7 @@ const _components: Map<Component["name"], Component> = new Map(),
   _renderersByExtension: _Renderer[] = [];
 
 const getComponents = (): Record<string, Component> =>
-    Object.fromEntries(_components.entries()),
+    Object.fromEntries(_components),
   getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
   getErrorHandler = (status: ErrorStatus, req: Request) => {
     const url = new URL(req.url);
@@ -82,7 +81,7 @@ const getComponents = (): Record<string, Component> =>
   getRenderer = (name: Renderer["name"]) => _renderers.get(name),
   getRenderersByExtension = (pathname: string): Renderer["name"][] => {
     return _renderersByExtension
-      .filter((engine) => pathname.endsWith(engine.target))
+      .filter(({ target }) => pathname.endsWith(target) || target === "*")
       .map((engine) => engine.name);
   };
 

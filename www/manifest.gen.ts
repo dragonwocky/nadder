@@ -3,20 +3,17 @@
 // into version control and production environments.
 
 import * as $0 from "./routes/_middleware.ts";
-import * as $1 from "./routes/_layouts/post.ts";
-import * as $2 from "./routes/lag.ts";
-import * as $3 from "./routes/_components/button.ts";
+import * as $1 from "./routes/lag.ts";
+import * as $2 from "./routes/_components/button.ts";
 
 const manifest = {
   routes: {
     "/_middleware.ts": $0,
-    "/lag.ts": $2,
+    "/lag.ts": $1,
   },
-  layouts: {
-    "/post.ts": $1,
-  },
+  layouts: {},
   components: {
-    "/button.ts": $3,
+    "/button.ts": $2,
   },
   importRoot: import.meta.url,
 };

@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title><%= it.title %></title>
+  </head>
+  <body>
+    <%~ it.content %>
+  </body>
+</html>

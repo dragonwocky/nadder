@@ -4,5 +4,5 @@ import pug from "npm:pug@3.0.2";
 export default ({
   name: "pug",
   targets: [".pug"],
-  render: (page, state) => pug.render(page, state),
+  render: (template, props) => pug.render(String(template), props),
 }) as Renderer;

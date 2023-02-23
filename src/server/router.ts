@@ -21,7 +21,6 @@ import {
 import { walkDirectory } from "./reader.ts";
 import { renderPage } from "./render.ts";
 import {
-  type _RenderFunction,
   type Context,
   type Data,
   type ErrorHandler,
@@ -138,7 +137,7 @@ const indexRoutes = async (manifest: Manifest) => {
           ...errorHandler,
           render: (ctx: Context) => {
             for (const key in data) ctx.state.set(key, data[key]);
-            return renderPage(ctx, errorHandler.render as _RenderFunction);
+            return renderPage(ctx, errorHandler.render!);
           },
         });
       } else {

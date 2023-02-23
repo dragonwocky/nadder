@@ -16,5 +16,5 @@ const md = unified()
 export default ({
   name: "md",
   targets: [".md"],
-  render: async (page) => String(await md.process(<string> page)),
+  render: async (template) => String(await md.process(String(template))),
 }) as Renderer;
