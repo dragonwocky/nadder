@@ -12,8 +12,8 @@ import {
 import { extname } from "std/path/mod.ts";
 import { BUILD_ID, INTERNAL_PREFIX } from "../constants.ts";
 import {
-  getProcessors,
   getRenderersByExtension,
+  getTransformers,
   useData,
   useErrorHandler,
   useMiddleware,
@@ -173,8 +173,8 @@ const indexRoutes = async (manifest: Manifest) => {
 const indexStatic = async (manifest: Manifest) => {
   const files = await walkDirectory(new URL("./static", manifest.importRoot));
   await Promise.all(files.map(async (file) => {
-    const processors = getProcessors(file.pathname);
-    for (const transform of processors) file = await transform(file);
+    const transformers = getTransformers(file.pathname);
+    for (const transform of transformers) file = await transform(file);
     if (manifest.ignorePattern?.test(file.pathname)) return;
 
     useMiddleware({

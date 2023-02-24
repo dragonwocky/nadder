@@ -7,9 +7,9 @@ import type {
   Filter,
   Layout,
   Middleware,
-  Processor,
   Promisable,
   Renderer,
+  Transformer,
 } from "./types.ts";
 
 type _PatternSortable = { pattern?: URLPattern; initialisesResponse?: boolean };
@@ -35,7 +35,7 @@ const sortByPattern = <T extends _PatternSortable[]>(handlers: T) => {
   });
 };
 
-type _Processor = { target: string; transform: Processor["transform"] };
+type _Transformer = { target: string; transform: Transformer["transform"] };
 type _Renderer = { target: string; name: Renderer["name"] };
 type _ErrorHandler = ErrorHandler & {
   render: (ctx: Context) => Promisable<string>;
@@ -46,9 +46,9 @@ const _data: Data[] = [],
   _filters: Map<string, Filter> = new Map(),
   _middleware: Middleware[] = [],
   _errorHandlers: _ErrorHandler[] = [],
-  _processors: _Processor[] = [],
   _renderers: Map<Renderer["name"], Renderer["render"]> = new Map(),
-  _renderersByExtension: _Renderer[] = [];
+  _renderersByExtension: _Renderer[] = [],
+  _transformers: _Transformer[] = [];
 
 const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
   getLayout = (name: Layout["name"]) => _layouts.get(name),
@@ -79,16 +79,16 @@ const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
       return handler.status === status && handler.pattern!.exec(url);
     })?.render;
   },
-  getProcessors = (pathname: string) => {
-    return _processors
-      .filter((processor) => pathname.endsWith(processor.target))
-      .map((processor) => processor.transform);
-  },
   getRenderer = (name: Renderer["name"]) => _renderers.get(name),
   getRenderersByExtension = (pathname: string): Renderer["name"][] => {
     return _renderersByExtension
       .filter(({ target }) => pathname.endsWith(target) || target === "*")
       .map((engine) => engine.name);
+  },
+  getTransformers = (pathname: string) => {
+    return _transformers
+      .filter((transformer) => pathname.endsWith(transformer.target))
+      .map((transformer) => transformer.transform);
   };
 
 const useData = (data: Data) => {
@@ -124,15 +124,15 @@ const useData = (data: Data) => {
     // innermost error handler takes priority ∴ reverse
     sortByPattern<ErrorHandler[]>(_errorHandlers).reverse();
   },
-  useProcessor = ({ targets, transform }: Processor) => {
-    for (const target of targets) _processors.push({ target, transform });
-    _processors.sort((a, b) => a.target.localeCompare(b.target));
-  },
   useRenderer = ({ name, targets, render }: Renderer) => {
     _renderers.set(name, render);
     // split up targets to create sorted list of extension-associated engines
     for (const target of targets) _renderersByExtension.push({ target, name });
     _renderersByExtension.sort((a, b) => a.target.localeCompare(b.target));
+  },
+  useTransformer = ({ targets, transform }: Transformer) => {
+    for (const target of targets) _transformers.push({ target, transform });
+    _transformers.sort((a, b) => a.target.localeCompare(b.target));
   };
 
 export {
@@ -143,15 +143,15 @@ export {
   getLayout,
   getLayoutData,
   getMiddleware,
-  getProcessors,
   getRenderer,
   getRenderersByExtension,
+  getTransformers,
   useComponent,
   useData,
   useErrorHandler,
   useFilter,
   useLayout,
   useMiddleware,
-  useProcessor,
   useRenderer,
+  useTransformer,
 };

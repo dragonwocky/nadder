@@ -110,8 +110,8 @@ export {
   useData,
   useFilter,
   useMiddleware,
-  useProcessor,
   useRenderer,
+  useTransformer,
 } from "./server/hooks.ts";
 export type {
   Component,
@@ -125,10 +125,10 @@ export type {
   Layout,
   Manifest,
   Middleware,
-  Processor,
   Promisable,
   Renderer,
   Route,
+  Transformer,
 } from "./server/types.ts";
 export { start };
 

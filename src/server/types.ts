@@ -114,7 +114,7 @@ interface File {
   etag: string;
   /**
    * the file's contents, cached to avoid repeated
-   * file reads and processor transform calls
+   * file reads and transformer calls
    */
   content:
     | Uint8Array
@@ -310,18 +310,18 @@ interface Renderer {
 // deno-lint-ignore no-explicit-any
 type Filter = (...args: any[]) => Promisable<string>;
 
-interface Processor {
+interface Transformer {
   /**
-   * specifies which files this processor can transform.
-   * processors are sorted from highest to lowest specificity
-   * (e.g. `.next.css` > `.css`) to determine the order they
-   * should be called on a file in. `*` matches all files but
-   * has the lowest specificity
+   * specifies which files this should transform.
+   * transformers are sorted from highest to lowest
+   * specificity (e.g. `.next.css` > `.css`) to determine
+   * the order they should be called on a file in. `*`
+   * matches all files but has the lowest specificity
    */
   targets: ("*" | string)[];
   /**
-   * called once on targeted files on server startup to
-   * preprocess file contents, types and/or pathnames
+   * called once on targeted files in the /static directory on
+   * startup to preprocess file contents, types and/or pathnames
    */
   transform: (file: File) => Promisable<File>;
 }
@@ -340,10 +340,10 @@ export type {
   Layout,
   Manifest,
   Middleware,
-  Processor,
   Promisable,
   Props,
   Renderer,
   Route,
+  Transformer,
 };
 export { HttpMethods };
