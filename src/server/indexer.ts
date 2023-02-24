@@ -1,16 +1,14 @@
-import {
-  extract as extractFrontmatter,
-  test as hasFrontmatter,
-} from "std/encoding/front_matter/any.ts";
-import { parse as parseToml } from "std/encoding/toml.ts";
-import { parse as parseYaml } from "std/encoding/yaml.ts";
+import { BUILD_ID, INTERNAL_PREFIX } from "../constants.ts";
 import {
   type ErrorStatus,
+  extname,
+  extractFrontmatter,
+  hasFrontmatter,
   isErrorStatus,
+  parseToml,
+  parseYaml,
   Status,
-} from "std/http/http_status.ts";
-import { extname } from "std/path/mod.ts";
-import { BUILD_ID, INTERNAL_PREFIX } from "../constants.ts";
+} from "./deps.ts";
 import {
   getRenderersByExtension,
   getTransformers,

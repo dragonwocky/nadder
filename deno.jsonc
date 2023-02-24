@@ -4,7 +4,6 @@
     "start": "deno run -A --watch=www/static/,www/routes/ www/main.ts"
   },
   "imports": {
-    "nadder/": "./src/",
-    "std/": "https://deno.land/std@0.176.0/"
+    "nadder/": "./src/"
   }
 }

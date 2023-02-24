@@ -1,8 +1,10 @@
+import { DOMParser } from "./deps.ts";
 import {
   getComponents,
   getFilters,
   getLayout,
   getLayoutData,
+  getProcessors,
   getRenderer,
 } from "./hooks.ts";
 import type {
@@ -96,13 +98,24 @@ const renderLayout = async (
 
     // render page into nested layouts
     const props = Object.fromEntries(ctx.state),
-      content = await renderComponent(ctx, {
+      template = await renderComponent(ctx, {
         renderFunc: render,
         renderEngines: ctx.state.get("renderEngines"),
         renderProps: ctx,
         engineProps: props,
       });
-    return resolveComponents(ctx, await renderLayout(ctx, props, content));
+    let content = await renderLayout(ctx, props, template);
+    content = await resolveComponents(ctx, content);
+
+    // postprocess page with dom for isomorphic ssr
+    const contentType = ctx.state.get("contentType") ?? "text/html";
+    if (contentType === "text/html") {
+      const processors = getProcessors(),
+        document = new DOMParser().parseFromString(content, contentType);
+      for (const processor of processors) await processor(document!, props);
+      content = document?.documentElement?.outerHTML ?? "";
+    }
+    return content;
   };
 
 export { renderPage };

@@ -1,7 +1,5 @@
-import { walk } from "std/fs/mod.ts";
-import { contentType } from "std/media_types/mod.ts";
-import { extname, toFileUrl } from "std/path/mod.ts";
 import { BUILD_ID } from "../constants.ts";
+import { contentType, extname, toFileUrl, walk } from "./deps.ts";
 import type { File } from "./types.ts";
 
 const catchErrors = async (handler: CallableFunction) => {

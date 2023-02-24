@@ -5,7 +5,7 @@ import {
   type ServeInit,
   Status,
   STATUS_TEXT,
-} from "std/http/mod.ts";
+} from "./server/deps.ts";
 import {
   getData,
   getErrorHandler,
@@ -56,12 +56,14 @@ const start = async (manifest: Manifest, serveInit: ServeInit = {}) => {
           errorHandler = getErrorHandler(status, req);
         let document = `${status} ${statusText}`, type = "text/plain";
         if (errorHandler) {
+          ctx.state.set("contentType", "text/html");
           document = await errorHandler(ctx);
-          type = ctx.state.get("contentType") as string ?? "text/html";
+          type = ctx.state.get("contentType") ?? "text/html";
         }
         const headers = new Headers({ "content-type": String(type) });
         return new Response(document, { status, statusText, headers });
       };
+    ctx.state.set("contentType", "text/html");
 
     try {
       // strip trailing slashes from url, e.g. /about/ -> .about
@@ -110,6 +112,7 @@ export {
   useData,
   useFilter,
   useMiddleware,
+  useProcessor,
   useRenderer,
   useTransformer,
 } from "./server/hooks.ts";
@@ -125,6 +128,7 @@ export type {
   Layout,
   Manifest,
   Middleware,
+  Processor,
   Promisable,
   Renderer,
   Route,

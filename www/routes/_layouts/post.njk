@@ -2,7 +2,7 @@
 title: Nadder
 layout: base.eta
 ---
-<div style="width: 100vw; height: 100vh; display: grid; place-items: center; margin: 0">
+<div class="w-full h-full grid items-center m-0 dark:(font-bold m(x-1 y-2) border-(red-200 1))">
   {{content | safe}}
   {{comp["button.ts"]({name:"Click Me"}) | safe}}
 </div>

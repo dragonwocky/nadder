@@ -1,5 +1,4 @@
-import type { ErrorStatus } from "std/http/http_status.ts";
-import type { ConnInfo } from "std/http/mod.ts";
+import type { ConnInfo, ErrorStatus, HTMLDocument } from "./deps.ts";
 
 type Promisable<T> = T | Promise<T>;
 
@@ -60,7 +59,7 @@ type Context = {
     & Map<`_comp_${string}`, Promise<string>>
     & Map<"layout", string | undefined>
     & Map<"renderEngines", string[] | undefined>
-    & Map<"contentType", string | undefined>
+    & Map<"contentType", string>
     & Map<"error", Error>
     & Map<string, unknown>;
   /**
@@ -259,6 +258,11 @@ interface Component {
  */
 type _ResolvableComponent = (props?: Props) => Promise<string> & string;
 
+/**
+ * renderers are called on targeted routes each time
+ * they are requested to translate template data into
+ * html ready to serve to the client
+ */
 interface Renderer {
   /**
    * engine name, used to manually select an engine or queue
@@ -266,17 +270,14 @@ interface Renderer {
    */
   name: string;
   /**
-   * specifies which routes this engine can render.
-   * renderers are sorted from highest to lowest specificity
-   * (e.g. `.tmpl.ts` > `.ts`) to determine the order they
-   * should be called on a route in. `*` matches all routes but
-   * has the lowest specificity
+   * specifies which routes this engine can render by file
+   * extension. renderers are sorted from highest to lowest
+   * specificity (e.g. `.tmpl.ts` > `.ts`) to determine the
+   * order they should be called on a route in. `*` matches
+   * all routes but has the lowest specificity
    */
   targets: ("*" | string)[];
   /**
-   * called on targeted routes each time they are requested
-   * to transform route data. this must return a string of html.
-   *
    * if this is the renderer with the highest priority and the
    * route is a javascript file, the renderer is passed the return
    * value of the route's default export. if the route is any other
@@ -309,20 +310,31 @@ interface Renderer {
  */
 // deno-lint-ignore no-explicit-any
 type Filter = (...args: any[]) => Promisable<string>;
+/**
+ * processors can be used to postprocess served routes
+ * regardless of which render engine they went through.
+ * processors will be called only on routes that serve
+ * html (indicated by the `contentType` key of `ctx.state`,
+ * which defaults to `text/html`) and will be passed a
+ * server-side implementation of the page's DOM with the
+ * response's `ctx.state` in object form as the second argument
+ */
+type Processor = (document: HTMLDocument, props: Props) => Promisable<void>;
 
+/**
+ * transformers act on files in the /static directory,
+ * called once per file on server startup to preprocess
+ * file contents, types and/or pathnames
+ */
 interface Transformer {
   /**
-   * specifies which files this should transform.
-   * transformers are sorted from highest to lowest
-   * specificity (e.g. `.next.css` > `.css`) to determine
-   * the order they should be called on a file in. `*`
-   * matches all files but has the lowest specificity
+   * specifies which files this can transform by file
+   * extension. transformers are sorted from highest to lowest
+   * specificity (e.g. `.next.css` > `.css`) to determine the
+   * order they should be called on a file in. `*` matches
+   * all files but has the lowest specificity
    */
   targets: ("*" | string)[];
-  /**
-   * called once on targeted files in the /static directory on
-   * startup to preprocess file contents, types and/or pathnames
-   */
   transform: (file: File) => Promisable<File>;
 }
 
@@ -340,6 +352,7 @@ export type {
   Layout,
   Manifest,
   Middleware,
+  Processor,
   Promisable,
   Props,
   Renderer,

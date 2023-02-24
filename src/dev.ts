@@ -1,4 +1,4 @@
-import { walk } from "std/fs/walk.ts";
+import { walk } from "./server/deps.ts";
 import { type Manifest } from "./server/types.ts";
 
 const collectImports = async (directory: URL) => {

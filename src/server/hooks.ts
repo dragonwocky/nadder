@@ -1,4 +1,4 @@
-import { type ErrorStatus, isErrorStatus } from "std/http/mod.ts";
+import { type ErrorStatus, isErrorStatus } from "./deps.ts";
 import type {
   Component,
   Context,
@@ -7,6 +7,7 @@ import type {
   Filter,
   Layout,
   Middleware,
+  Processor,
   Promisable,
   Renderer,
   Transformer,
@@ -35,8 +36,8 @@ const sortByPattern = <T extends _PatternSortable[]>(handlers: T) => {
   });
 };
 
-type _Transformer = { target: string; transform: Transformer["transform"] };
 type _Renderer = { target: string; name: Renderer["name"] };
+type _Transformer = { target: string; transform: Transformer["transform"] };
 type _ErrorHandler = ErrorHandler & {
   render: (ctx: Context) => Promisable<string>;
 };
@@ -48,6 +49,7 @@ const _data: Data[] = [],
   _errorHandlers: _ErrorHandler[] = [],
   _renderers: Map<Renderer["name"], Renderer["render"]> = new Map(),
   _renderersByExtension: _Renderer[] = [],
+  _processors: Processor[] = [],
   _transformers: _Transformer[] = [];
 
 const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
@@ -85,6 +87,7 @@ const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
       .filter(({ target }) => pathname.endsWith(target) || target === "*")
       .map((engine) => engine.name);
   },
+  getProcessors = () => _processors,
   getTransformers = (pathname: string) => {
     return _transformers
       .filter((transformer) => pathname.endsWith(transformer.target))
@@ -105,9 +108,7 @@ const useData = (data: Data) => {
     comp.render ??= comp.default;
     if (comp.name && comp.render) _components.set(comp.name, comp);
   },
-  useFilter = (name: string, filter: Filter) => {
-    _filters.set(name, filter);
-  },
+  useFilter = (name: string, filter: Filter) => _filters.set(name, filter),
   useMiddleware = (middleware: Middleware) => {
     if (!("default" in middleware || "handler" in middleware)) return;
     _middleware.push({
@@ -130,6 +131,7 @@ const useData = (data: Data) => {
     for (const target of targets) _renderersByExtension.push({ target, name });
     _renderersByExtension.sort((a, b) => a.target.localeCompare(b.target));
   },
+  useProcessor = (processor: Processor) => _processors.push(processor),
   useTransformer = ({ targets, transform }: Transformer) => {
     for (const target of targets) _transformers.push({ target, transform });
     _transformers.sort((a, b) => a.target.localeCompare(b.target));
@@ -143,6 +145,7 @@ export {
   getLayout,
   getLayoutData,
   getMiddleware,
+  getProcessors,
   getRenderer,
   getRenderersByExtension,
   getTransformers,
@@ -152,6 +155,7 @@ export {
   useFilter,
   useLayout,
   useMiddleware,
+  useProcessor,
   useRenderer,
   useTransformer,
 };
