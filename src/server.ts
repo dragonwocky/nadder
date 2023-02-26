@@ -20,6 +20,7 @@ import type {
   Manifest,
   Middleware,
 } from "./server/types.ts";
+import { createResponse } from "./server/utils.ts";
 
 const start = async (manifest: Manifest, serveInit: ServeInit = {}) => {
   manifest.ignorePattern ??= /\/(\.|_)/g;
@@ -60,8 +61,8 @@ const start = async (manifest: Manifest, serveInit: ServeInit = {}) => {
           document = await errorHandler(ctx);
           type = ctx.state.get("contentType") ?? "text/html";
         }
-        const headers = new Headers({ "content-type": String(type) });
-        return new Response(document, { status, statusText, headers });
+        const init = { status, "content-type": String(type) };
+        return createResponse(document, init);
       };
     ctx.state.set("contentType", "text/html");
 
@@ -134,6 +135,7 @@ export type {
   Route,
   Transformer,
 } from "./server/types.ts";
+export { createResponse } from "./server/utils.ts";
 export { start };
 
 /**

@@ -8,8 +8,13 @@ import {
 import { presetIcons } from "npm:@unocss/preset-icons@0.50.0";
 import { presetTypography } from "npm:@unocss/preset-typography@0.50.0";
 import { presetUno } from "npm:@unocss/preset-uno@0.50.0";
-import { type Middleware, type Processor, useMiddleware } from "../server.ts";
-import { contentType, type Element, Status } from "../server/deps.ts";
+import {
+  createResponse,
+  type Middleware,
+  type Processor,
+  useMiddleware,
+} from "../server.ts";
+import { contentType, type Element } from "../server/deps.ts";
 const cssResetUrl = "https://esm.sh/modern-normalize@1.1.0?css",
   cssReset = await fetch(cssResetUrl).then((res) => res.text());
 
@@ -50,9 +55,8 @@ const config: Config = {
   };
 middleware.handler = async (_req, ctx) => {
   if (!uno || config.outputMode !== "cssFile") return ctx.next!();
-  const { css } = await uno.generate(classCache.join(" ")),
-    headers = new Headers({ "content-type": contentType(".css") });
-  return new Response(css, { status: Status.OK, headers });
+  const { css } = await uno.generate(classCache.join(" "));
+  return createResponse(css, { "content-type": contentType(".css") });
 };
 useMiddleware(middleware);
 

@@ -16,7 +16,7 @@ import {
   useErrorHandler,
   useMiddleware,
 } from "./hooks.ts";
-import { walkDirectory } from "./reader.ts";
+import { createResponse, pathToPattern, walkDirectory } from "./utils.ts";
 import { renderPage } from "./renderer.ts";
 import {
   type Context,
@@ -29,27 +29,6 @@ import {
   type Middleware,
   type Route,
 } from "./types.ts";
-
-const pathToPattern = (path: string): URLPattern => {
-  return new URLPattern({
-    pathname: path.split("/")
-      .map((part) => {
-        if (part.endsWith("]")) {
-          // repeated group e.g. /[...path] matches /path/to/file/
-          if (part.startsWith("[...")) return `:${part.slice(4, -1)}*`;
-          // named group e.g. /user/[id] matches /user/6448
-          if (part.startsWith("[")) `:${part.slice(1, -1)}`;
-        }
-        return part;
-      }).join("/")
-      // /route/index is equiv to -> /route
-      .replace(/\/index$/, "")
-      // /*? matches all nested routes
-      .replace(/\/_(middleware|data|\d\d\d)$/, "/*?")
-      // ensure starting slash and remove repeat slashes
-      .replace(/(^\/*|\/+)/g, "/"),
-  });
-};
 
 type _Template = {
   name?: string;
@@ -147,9 +126,8 @@ const indexRoutes = async (manifest: Manifest) => {
             ctx.render = () => renderPage(ctx, route.render!);
             if (GET) return GET(req, ctx);
             const document = await ctx.render(),
-              type = ctx.state.get("contentType") ?? "text/html",
-              headers = new Headers({ "content-type": String(type) });
-            return new Response(document, { status: Status.OK, headers });
+              type = ctx.state.get("contentType") ?? "text/html";
+            return createResponse(document, { "content-type": String(type) });
           };
         }
         for (const key of HttpMethods) {
@@ -192,6 +170,8 @@ const indexStatic = async (manifest: Manifest) => {
           return Response.redirect(ctx.url);
           // cache requested files matching current build for a year
         } else if (cacheId) headers.set("cache-control", cacheControl);
+        // set last modified if known
+        if (file.mtime) headers.set("last-modified", file.mtime.toUTCString());
         // conditional request: only send response body if cache resource has
         // changed, tested by comparing etags (hashed from build id and pathname)
         // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-None-Match
@@ -199,8 +179,8 @@ const indexStatic = async (manifest: Manifest) => {
         const etagsMatch = (a: string, b: string) =>
           a?.replace(/^W\//, "") === b?.replace(/^W\//, "");
         return etagsMatch(file.etag, req.headers.get("if-none-match") ?? "")
-          ? new Response(null, { status: Status.NotModified, headers })
-          : new Response(file.content, { status: Status.OK, headers });
+          ? createResponse(null, { status: Status.NotModified, headers })
+          : createResponse(file.content, { status: Status.OK, headers });
       },
       initialisesResponse: true,
     });

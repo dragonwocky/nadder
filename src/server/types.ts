@@ -97,6 +97,11 @@ interface File {
    */
   pathname: string;
   /**
+   * the time the file was last modified,
+   * used in generating http headers
+   */
+  mtime: Deno.FileInfo["mtime"];
+  /**
    * the size of the file in bytes,
    * used in generating http headers
    */

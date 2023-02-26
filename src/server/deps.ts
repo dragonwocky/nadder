@@ -1,3 +1,4 @@
+export { toHashString } from "https://deno.land/std@0.178.0/crypto/mod.ts";
 export {
   extract as extractFrontmatter,
   test as hasFrontmatter,
