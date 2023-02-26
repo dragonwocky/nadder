@@ -126,9 +126,9 @@ const indexRoutes = async (manifest: Manifest) => {
         data[key] = exports[key as keyof typeof exports];
       }
       data.renderEngines ??= getRenderersByExtension(pathname);
+      if (!manifest.routes[pathname]) exports.default ??= () => body;
       if (isErrorHandler) {
         const errorHandler = exports as ErrorHandler;
-        if (!manifest.routes[pathname]) errorHandler.default ??= () => body;
         errorHandler.render ??= errorHandler.default;
         errorHandler.status = +status as ErrorStatus;
         useErrorHandler({
@@ -140,10 +140,9 @@ const indexRoutes = async (manifest: Manifest) => {
         });
       } else {
         const route = exports as Route;
-        if (!manifest.routes[pathname]) route.default ??= () => body;
         route.render ??= route.default;
         if (route.GET || route.render) {
-          const GET = route.GET;
+          const { GET } = route;
           route.GET = async (req: Request, ctx: Context) => {
             ctx.render = () => renderPage(ctx, route.render!);
             if (GET) return GET(req, ctx);

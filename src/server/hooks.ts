@@ -45,12 +45,12 @@ const _data: Data[] = [],
   _layouts: Map<Layout["name"], Layout> = new Map(),
   _components: Map<Component["name"], Component> = new Map(),
   _filters: Map<string, Filter> = new Map(),
-  _middleware: Middleware[] = [],
-  _errorHandlers: _ErrorHandler[] = [],
   _renderers: Map<Renderer["name"], Renderer["render"]> = new Map(),
   _renderersByExtension: _Renderer[] = [],
   _processors: Processor[] = [],
-  _transformers: _Transformer[] = [];
+  _transformers: _Transformer[] = [],
+  _middleware: Middleware[] = [],
+  _errorHandlers: _ErrorHandler[] = [];
 
 const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
   getLayout = (name: Layout["name"]) => _layouts.get(name),
@@ -71,17 +71,9 @@ const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
   },
   getFilters = (): Record<string, Filter> => {
     return Object.fromEntries(_filters);
-  },
-  getMiddleware = (url: URL) => {
-    return _middleware.filter((mw) => mw.pattern!.exec(url));
-  },
-  getErrorHandler = (status: ErrorStatus, req: Request) => {
-    const url = new URL(req.url);
-    return _errorHandlers.find((handler) => {
-      return handler.status === status && handler.pattern!.exec(url);
-    })?.render;
-  },
-  getRenderer = (name: Renderer["name"]) => _renderers.get(name),
+  };
+
+const getRenderer = (name: Renderer["name"]) => _renderers.get(name),
   getRenderersByExtension = (pathname: string): Renderer["name"][] => {
     return _renderersByExtension
       .filter(({ target }) => pathname.endsWith(target) || target === "*")
@@ -92,6 +84,16 @@ const getData = (url: URL) => _data.filter((obj) => obj.pattern!.exec(url)),
     return _transformers
       .filter((transformer) => pathname.endsWith(transformer.target))
       .map((transformer) => transformer.transform);
+  };
+
+const getMiddleware = (url: URL) => {
+    return _middleware.filter((mw) => mw.pattern!.exec(url));
+  },
+  getErrorHandler = (status: ErrorStatus, req: Request) => {
+    const url = new URL(req.url);
+    return _errorHandlers.find((handler) => {
+      return handler.status === status && handler.pattern!.exec(url);
+    })?.render;
   };
 
 const useData = (data: Data) => {
@@ -108,24 +110,9 @@ const useData = (data: Data) => {
     comp.render ??= comp.default;
     if (comp.name && comp.render) _components.set(comp.name, comp);
   },
-  useFilter = (name: string, filter: Filter) => _filters.set(name, filter),
-  useMiddleware = (middleware: Middleware) => {
-    if (!("default" in middleware || "handler" in middleware)) return;
-    _middleware.push({
-      method: "*",
-      pattern: new URLPattern({ pathname: "/*?" }),
-      ...middleware,
-    });
-    sortByPattern<Middleware[]>(_middleware);
-  },
-  useErrorHandler = (errorHandler: _ErrorHandler) => {
-    if (!isErrorStatus(errorHandler.status!)) return;
-    if (!("default" in errorHandler || "render" in errorHandler)) return;
-    _errorHandlers.push(errorHandler);
-    // innermost error handler takes priority ∴ reverse
-    sortByPattern<ErrorHandler[]>(_errorHandlers).reverse();
-  },
-  useRenderer = ({ name, targets, render }: Renderer) => {
+  useFilter = (name: string, filter: Filter) => _filters.set(name, filter);
+
+const useRenderer = ({ name, targets, render }: Renderer) => {
     _renderers.set(name, render);
     // split up targets to create sorted list of extension-associated engines
     for (const target of targets) _renderersByExtension.push({ target, name });
@@ -135,6 +122,21 @@ const useData = (data: Data) => {
   useTransformer = ({ targets, transform }: Transformer) => {
     for (const target of targets) _transformers.push({ target, transform });
     _transformers.sort((a, b) => a.target.localeCompare(b.target));
+  };
+
+const useMiddleware = (middleware: Middleware) => {
+    if (!("default" in middleware || "handler" in middleware)) return;
+    middleware.method ??= "*";
+    middleware.pattern ??= new URLPattern({ pathname: "/*?" });
+    _middleware.push(middleware);
+    sortByPattern<Middleware[]>(_middleware);
+  },
+  useErrorHandler = (errorHandler: _ErrorHandler) => {
+    if (!isErrorStatus(errorHandler.status!)) return;
+    if (!("default" in errorHandler || "render" in errorHandler)) return;
+    _errorHandlers.push(errorHandler);
+    // innermost error handler takes priority ∴ reverse
+    sortByPattern<ErrorHandler[]>(_errorHandlers).reverse();
   };
 
 export {
