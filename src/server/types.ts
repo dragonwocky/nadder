@@ -343,6 +343,14 @@ interface Transformer {
   transform: (file: File) => Promisable<File>;
 }
 
+interface Plugin<Config = unknown> {
+  setup?: (config: Config) => void;
+  renderer?: Renderer;
+  processor?: Processor;
+  transformer?: Transformer;
+  filters?: Record<string, Filter>;
+}
+
 export type {
   _RenderFunc,
   _ResolvableComponent,
@@ -357,6 +365,7 @@ export type {
   Layout,
   Manifest,
   Middleware,
+  Plugin,
   Processor,
   Promisable,
   Props,

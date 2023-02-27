@@ -55,7 +55,7 @@ const config: Config = {
   };
 middleware.handler = async (_req, ctx) => {
   if (!uno || config.outputMode !== "cssFile") return ctx.next!();
-  const { css } = await uno.generate(classCache.join(" "));
+  const css = await generate(...classCache);
   return createResponse(css, { "content-type": contentType(".css") });
 };
 useMiddleware(middleware);
@@ -96,6 +96,11 @@ const hash = (str: string) => {
       uno.config.shortcuts.push([alias, classes]);
       return `${[alias, ...unknown].join(" ")}`;
     } else return className;
+  },
+  generate = async (...classNames: string[]) => {
+    const input = classNames.join(" "),
+      opts = { minify: true };
+    return (await uno.generate(input, opts)).css;
   };
 
 const processor: Processor = async (document) => {
@@ -117,7 +122,7 @@ const processor: Processor = async (document) => {
       $style.setAttribute("id", id);
       document.head.append($style);
     }
-    $style.innerText += (await uno.generate(classNames.join(" "))).css;
+    $style.innerText += await generate(...classNames);
   } else {
     const href = "/" + config.cssFilePath.replace(/^\/+/, "");
     let $link = document.querySelector(`link[href="${href}"]`);
@@ -129,5 +134,4 @@ const processor: Processor = async (document) => {
   }
 };
 
-export default processor;
 export { type Config, processor, setup };

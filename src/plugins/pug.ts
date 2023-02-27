@@ -1,7 +1,7 @@
 import type { Filter, Renderer } from "../server.ts";
 import pug from "npm:pug@3.0.2";
 
-export default ({
+const renderer: Renderer = {
   name: "pug",
   targets: [".pug"],
   render: (template, props) => {
@@ -14,4 +14,6 @@ export default ({
     }
     return pug.render(String(template), { ...props, filters });
   },
-}) as Renderer;
+};
+
+export { renderer };

@@ -7,6 +7,7 @@ import type {
   Filter,
   Layout,
   Middleware,
+  Plugin,
   Processor,
   Promisable,
   Renderer,
@@ -122,6 +123,14 @@ const useRenderer = ({ name, targets, render }: Renderer) => {
   useTransformer = ({ targets, transform }: Transformer) => {
     for (const target of targets) _transformers.push({ target, transform });
     _transformers.sort((a, b) => a.target.localeCompare(b.target));
+  },
+  usePlugin = (plugin: Plugin) => {
+    if (plugin.renderer) useRenderer(plugin.renderer);
+    if (plugin.processor) useProcessor(plugin.processor);
+    if (plugin.transformer) useTransformer(plugin.transformer);
+    if (plugin.filters) {
+      for (const name in plugin.filters) useFilter(name, plugin.filters[name]);
+    }
   };
 
 const useMiddleware = (middleware: Middleware) => {
@@ -157,6 +166,7 @@ export {
   useFilter,
   useLayout,
   useMiddleware,
+  usePlugin,
   useProcessor,
   useRenderer,
   useTransformer,

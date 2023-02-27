@@ -113,6 +113,7 @@ export {
   useData,
   useFilter,
   useMiddleware,
+  usePlugin,
   useProcessor,
   useRenderer,
   useTransformer,
@@ -129,6 +130,7 @@ export type {
   Layout,
   Manifest,
   Middleware,
+  Plugin,
   Processor,
   Promisable,
   Renderer,
@@ -139,6 +141,5 @@ export { createResponse } from "./server/utils.ts";
 export { start };
 
 /**
- * route postprocessors: e.g. twind
  * interactive islands (isomorphic routes): via renderer/postprocessor?
  */

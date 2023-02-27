@@ -1,0 +1,11 @@
+.header {
+  background-color: blue;
+  & p {
+    font-size: 16px;
+    & span {
+      &:hover {
+        color: green;
+      }
+    }
+  }
+}

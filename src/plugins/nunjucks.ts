@@ -17,7 +17,7 @@ const njk = new Environment(),
     };
   };
 
-export default ({
+const renderer: Renderer = {
   name: "njk",
   targets: [".njk"],
   render: (template, props) => {
@@ -32,4 +32,6 @@ export default ({
       njk.renderString(String(template), props, handleAsync);
     });
   },
-}) as Renderer;
+};
+
+export { renderer };
