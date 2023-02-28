@@ -2,12 +2,10 @@ import { BUILD_ID, INTERNAL_PREFIX } from "../constants.ts";
 
 const hashAssetPath = (path: string) => {
     if (!path.startsWith("/") || path.startsWith("//")) return path;
-    const localUrlhost = `${INTERNAL_PREFIX}assetcache.local`,
-      url = new URL(path, `https://${localUrlhost}`),
+    const url = new URL(path, `https://${INTERNAL_PREFIX}assetcache.local`),
       isHttps = url.protocol === "https:",
-      isLocalUrl = url.host === localUrlhost,
       isAlreadyHashed = url.searchParams.has(`${INTERNAL_PREFIX}_cache_id`);
-    if (!isHttps || !isLocalUrl || isAlreadyHashed) return path;
+    if (!isHttps || isAlreadyHashed) return path;
     url.searchParams.set(`${INTERNAL_PREFIX}_cache_id`, BUILD_ID);
     return url.pathname + url.search + url.hash;
   },

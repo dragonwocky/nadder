@@ -343,8 +343,9 @@ interface Transformer {
   transform: (file: File) => Promisable<File>;
 }
 
-interface Plugin<Config = unknown> {
-  setup?: (config: Config) => void;
+interface Plugin {
+  // deno-lint-ignore no-explicit-any
+  setup?: (...args: any) => void;
   renderer?: Renderer;
   processor?: Processor;
   transformer?: Transformer;

@@ -5,6 +5,7 @@ import {
   md,
   njk,
   pug,
+  solidjs,
   unocss,
 } from "nadder/plugins.ts";
 import { start, useFilter, usePlugin } from "nadder/server.ts";
@@ -18,6 +19,7 @@ import manifest from "./manifest.gen.ts";
   njk,
   pug,
   unocss,
+  solidjs,
 ].forEach(usePlugin);
 unocss.setup({ outputMode: "styleTag", compileClasses: true });
 

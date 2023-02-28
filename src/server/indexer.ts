@@ -105,7 +105,7 @@ const indexRoutes = async (manifest: Manifest) => {
         data[key] = exports[key as keyof typeof exports];
       }
       data.renderEngines ??= getRenderersByExtension(pathname);
-      if (!manifest.routes[pathname]) exports.default ??= () => body;
+      exports.default ??= () => body;
       if (isErrorHandler) {
         const errorHandler = exports as ErrorHandler;
         errorHandler.render ??= errorHandler.default;

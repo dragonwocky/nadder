@@ -14,6 +14,7 @@ import type {
   Props,
   Renderer,
 } from "./types.ts";
+import { BUILD_ID, IS_PROD } from "../constants.ts";
 
 interface _RenderArgs<P> {
   renderFunc?: _RenderFunc<P>;
@@ -113,6 +114,14 @@ const renderLayout = async (
       const processors = getProcessors(),
         document = new DOMParser().parseFromString(content, contentType);
       for (const processor of processors) await processor(document!, props);
+      // inject constants into client global
+      if (document?.querySelector("script")) {
+        const $script = document.createElement("script");
+        $script.innerText = `Object.assign(globalThis,${
+          JSON.stringify({ BUILD_ID, IS_PROD })
+        })`;
+        document.head.prepend($script);
+      }
       content = document?.documentElement?.outerHTML ?? "";
     }
     return content;
